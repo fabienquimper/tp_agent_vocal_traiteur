@@ -18,7 +18,6 @@ from langchain.schema import HumanMessage, SystemMessage
 
 from ..config import settings
 from ..rag.retriever import get_retriever
-from ..orders.writer import write_order
 from .state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -158,33 +157,6 @@ def search_rag(state: AgentState) -> dict:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Nœud 4 : Traitement d'une commande (écriture Excel)
-# ═════════════════════════════════════════════════════════════════════════════
-
-def process_order(state: AgentState) -> dict:
-    """
-    Écrit la commande dans le fichier Excel approprié :
-    - commandes_simples.xlsx  → commande ≤ seuil
-    - commandes_complexes.xlsx → commande > seuil
-    """
-    is_complex = state["intent"] == "commande_complexe"
-    order_items = state.get("order_items", [])
-
-    if not order_items:
-        logger.warning("Commande sans articles – rien à écrire")
-        return {"order_items": []}
-
-    try:
-        write_order(order_items, is_complex=is_complex)
-        file_type = "complexe" if is_complex else "simple"
-        logger.info(f"Commande {file_type} enregistrée : {order_items}")
-        return {"order_items": order_items}
-    except Exception as exc:
-        logger.error(f"Erreur écriture Excel : {exc}")
-        return {"error": str(exc)}
-
-
-# ═════════════════════════════════════════════════════════════════════════════
 # Nœud 5 : Génération de la réponse textuelle
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -210,24 +182,15 @@ def generate_response(state: AgentState) -> dict:
             f"Informe poliment le client et invite-le à rappeler ou envoyer un email."
         )
 
-    elif intent == "commande_simple":
+    elif intent in ("commande_simple", "commande_complexe"):
         items_str = ", ".join(
-            f"{it['quantite']} {it['produit']}" for it in order_items
+            f"{it['quantite']}× {it['produit']}" for it in order_items
         )
         user_message = (
-            f"Confirme au client que sa commande a bien été enregistrée : {items_str}. "
-            f"Rappelle-lui le délai minimum de 48h et invite-le à contacter la boutique "
-            f"pour finaliser (paiement, livraison)."
-        )
-
-    elif intent == "commande_complexe":
-        items_str = ", ".join(
-            f"{it['quantite']} {it['produit']}" for it in order_items
-        )
-        user_message = (
-            f"Informe le client que sa commande importante ({items_str}) a été "
-            f"transmise à l'équipe pour traitement personnalisé. "
-            f"Un conseiller le contactera sous 24h ouvrées pour confirmer les détails."
+            f"Le client souhaite commander : {items_str}. "
+            f"Confirme que tu as bien noté les articles et demande-lui "
+            f"son nom, son prénom et son numéro de téléphone pour finaliser la commande. "
+            f"Sois chaleureux et concis (2 phrases maximum)."
         )
 
     elif intent == "info" and context:
@@ -300,6 +263,6 @@ def route_after_classify(state: AgentState) -> str:
     if intent == "info":
         return "search_rag"
     elif intent in ("commande_simple", "commande_complexe"):
-        return "process_order"
+        return "generate_response"
     else:
         return "generate_response"

@@ -1,34 +1,31 @@
 """
 Graphe LangGraph – Orchestration de l'agent
 ─────────────────────────────────────────────
-Construit le graphe d'exécution avec les nœuds et les transitions.
-
 Flux visuel :
-                      ┌──────────────┐
-                      │  transcribe  │  (si audio_bytes)
-                      └──────┬───────┘
-                             │
-                      ┌──────▼───────┐
-                      │   classify   │
-                      └──────┬───────┘
-                             │
-               ┌─────────────┼─────────────┐
-               │             │             │
-        ┌──────▼──────┐ ┌────▼────┐  ┌────▼──────────┐
-        │  search_rag │ │ process │  │    (autre)     │
-        └──────┬──────┘ │  order  │  └────┬──────────┘
-               │        └────┬────┘       │
-               └─────────────┼────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │ generate_response│
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   synthesize    │
-                    └────────┬────────┘
-                             │
-                           [END]
+                     ┌──────────────┐
+                     │  transcribe  │  (si audio_bytes)
+                     └──────┬───────┘
+                            │
+                     ┌──────▼───────┐
+                     │   classify   │
+                     └──────┬───────┘
+                            │
+              ┌─────────────┴─────────────┐
+              │                           │
+       ┌──────▼──────┐           ┌────────▼────────┐
+       │  search_rag │           │ generate_response│  ← commandes + autre
+       └──────┬──────┘           └────────┬────────┘
+              └─────────────┬─────────────┘
+                            │
+                   ┌────────▼────────┐
+                   │   synthesize    │
+                   └────────┬────────┘
+                            │
+                          [END]
+
+Note : les commandes ne passent plus par un nœud "process_order".
+L'écriture Excel/JSON est déclenchée par main.py en fin de session
+de collecte des informations client.
 """
 
 from langgraph.graph import StateGraph, START, END
@@ -38,7 +35,6 @@ from .nodes import (
     transcribe_audio,
     classify_request,
     search_rag,
-    process_order,
     generate_response,
     synthesize_speech,
     route_after_classify,
@@ -52,32 +48,25 @@ def build_graph():
     """Construit et compile le graphe LangGraph."""
     graph = StateGraph(AgentState)
 
-    # ── Ajout des nœuds ────────────────────────────────────────────────────────
     graph.add_node("transcribe", transcribe_audio)
     graph.add_node("classify", classify_request)
     graph.add_node("search_rag", search_rag)
-    graph.add_node("process_order", process_order)
     graph.add_node("generate_response", generate_response)
     graph.add_node("synthesize", synthesize_speech)
 
-    # ── Transitions fixes ──────────────────────────────────────────────────────
     graph.add_edge(START, "transcribe")
     graph.add_edge("transcribe", "classify")
 
-    # ── Transition conditionnelle après classification ─────────────────────────
     graph.add_conditional_edges(
         "classify",
         route_after_classify,
         {
             "search_rag": "search_rag",
-            "process_order": "process_order",
             "generate_response": "generate_response",
         },
     )
 
-    # ── Convergence vers la génération puis la synthèse ───────────────────────
     graph.add_edge("search_rag", "generate_response")
-    graph.add_edge("process_order", "generate_response")
     graph.add_edge("generate_response", "synthesize")
     graph.add_edge("synthesize", END)
 
