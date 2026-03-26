@@ -517,6 +517,33 @@ def health():
     return {"status": "ok", "service": "agent"}
 
 
+@app.post("/api/transcribe")
+async def transcribe_audio_only(
+    audio: UploadFile = File(..., description="Fichier audio (WAV, MP3, OGG…)"),
+):
+    """
+    Transcrit uniquement l'audio en texte via le service STT.
+    Utilisé par le frontend pour afficher la transcription avant
+    de soumettre la requête complète à l'agent.
+    """
+    from .config import settings
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Fichier audio vide")
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                f"{settings.stt_service_url}/transcribe",
+                files={"audio": ("audio.wav", audio_bytes, "audio/wav")},
+                params={"language": "fr"},
+            )
+            r.raise_for_status()
+            return r.json()
+    except Exception as exc:
+        logger.error(f"Transcription error : {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/api/voice", response_model=AgentResponse)
 async def process_voice(
     audio: UploadFile = File(..., description="Fichier audio (WAV, MP3, OGG…)"),

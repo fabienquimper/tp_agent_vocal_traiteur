@@ -234,6 +234,33 @@ body {
   font-style: italic;
 }
 
+/* ── Bulle "Réflexion en cours..." ───────────────────────────────────────── */
+.thinking-bubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: .9rem;
+}
+.thinking-dots {
+  font-size: .55rem;
+  letter-spacing: 2px;
+  animation: blink 1.2s step-start infinite;
+  color: var(--primary);
+}
+.thinking-text {
+  animation: fade-in .3s ease;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .2; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Total de la commande ─────────────────────────────────────────────────── */
 .order-total {
   display: inline-block;

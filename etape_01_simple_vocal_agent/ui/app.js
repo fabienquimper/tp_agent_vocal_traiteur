@@ -50,15 +50,16 @@ async function sendText() {
 
   addMessage(text, 'user');
   textInput.value = '';
-  setStatus('Traitement en cours...');
   setInputEnabled(false);
 
+  const thinkingBubble = addThinkingBubble();
   try {
     const res = await fetch(`${API_BASE}/text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, session_id: sessionId, skip_tts: false }),
     });
+    thinkingBubble.remove();
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `HTTP ${res.status}`);
@@ -66,6 +67,7 @@ async function sendText() {
     const data = await res.json();
     handleAgentResponse(data);
   } catch (err) {
+    thinkingBubble.remove();
     addMessage(`Erreur : ${err.message}`, 'bot error');
   } finally {
     setStatus('');
@@ -111,21 +113,41 @@ async function sendAudio(blob) {
   const { transcriptEl } = addAudioBubble(blob);
 
   try {
-    const formData = new FormData();
-    formData.append('audio', blob, 'recording.wav');
-    if (sessionId) formData.append('session_id', sessionId);
+    // ── Étape 1 : transcription ──────────────────────────────────────────────
+    setStatus('Transcription en cours...');
+    const sttForm = new FormData();
+    sttForm.append('audio', blob, 'recording.wav');
 
-    const res = await fetch(`${API_BASE}/voice`, { method: 'POST', body: formData });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${res.status}`);
+    const sttRes = await fetch(`${API_BASE}/transcribe`, { method: 'POST', body: sttForm });
+    if (!sttRes.ok) throw new Error(`STT HTTP ${sttRes.status}`);
+    const sttData = await sttRes.json();
+    const transcript = sttData.transcript?.trim() || '';
+
+    // Affiche la transcription dès qu'elle est disponible
+    transcriptEl.textContent = transcript || '(inaudible)';
+    if (!transcript) { setStatus(''); setInputEnabled(true); return; }
+
+    // ── Étape 2 : agent (LLM + TTS) ─────────────────────────────────────────
+    const thinkingBubble = addThinkingBubble();
+    setStatus('');
+
+    const agentRes = await fetch(`${API_BASE}/text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: transcript, session_id: sessionId, skip_tts: false }),
+    });
+    thinkingBubble.remove();
+
+    if (!agentRes.ok) {
+      const err = await agentRes.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${agentRes.status}`);
     }
-    const data = await res.json();
-    transcriptEl.textContent = data.transcript || '(inaudible)';
+    const data = await agentRes.json();
     handleAgentResponse(data);
+
   } catch (err) {
-    transcriptEl.textContent = '(erreur)';
-    addMessage(`Erreur audio : ${err.message}`, 'bot error');
+    transcriptEl.textContent = transcriptEl.textContent === '…' ? '(erreur)' : transcriptEl.textContent;
+    addMessage(`Erreur : ${err.message}`, 'bot error');
   } finally {
     micLabel.textContent = 'Maintenir pour parler';
     setStatus('');
@@ -268,6 +290,56 @@ function addOnSitePaymentChoice() {
     currentOrderTotal = null;
     addMessage('Commande annulée. N\'hésitez pas à repasser une commande quand vous le souhaitez !', 'bot');
   });
+}
+
+// ── Bulle "Réflexion en cours..." animée ──────────────────────────────────────
+const _THINKING_STEPS = [
+  'Analyse de la demande...',
+  'Classification en cours...',
+  'Recherche dans la base de connaissances...',
+  'Préparation de la réponse...',
+  'Synthèse vocale...',
+];
+
+function addThinkingBubble() {
+  const div = document.createElement('div');
+  div.className = 'message bot thinking-msg';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = '🤖';
+  div.appendChild(avatar);
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble thinking-bubble';
+
+  const dotsEl = document.createElement('span');
+  dotsEl.className = 'thinking-dots';
+  dotsEl.textContent = '●●●';
+
+  const textEl = document.createElement('span');
+  textEl.className = 'thinking-text';
+  textEl.textContent = _THINKING_STEPS[0];
+
+  bubble.appendChild(dotsEl);
+  bubble.appendChild(textEl);
+  div.appendChild(bubble);
+  chatArea.appendChild(div);
+  scrollToBottom();
+
+  // Rotation des messages toutes les 2,5s
+  let idx = 0;
+  const interval = setInterval(() => {
+    idx = (idx + 1) % _THINKING_STEPS.length;
+    textEl.textContent = _THINKING_STEPS[idx];
+  }, 2500);
+
+  // Retourne un objet avec remove() pour nettoyer proprement
+  div.remove = () => {
+    clearInterval(interval);
+    div.parentNode?.removeChild(div);
+  };
+  return div;
 }
 
 // ── Bulle audio utilisateur ────────────────────────────────────────────────────
