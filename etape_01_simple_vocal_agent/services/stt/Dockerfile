@@ -1,8 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Service STT (Speech-to-Text) – faster-whisper
-# Modèle Whisper "base" (~145 MB) téléchargé au build
+# Modèle Whisper pré-téléchargé au build (configurable via ARG WHISPER_MODEL)
+# Modèles : tiny, base, small, medium, large-v2, large-v3
 # ─────────────────────────────────────────────────────────────────────────────
 FROM python:3.11-slim
+
+ARG WHISPER_MODEL=base
 
 WORKDIR /app
 
@@ -17,12 +20,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pré-téléchargement du modèle Whisper (évite le téléchargement au 1er appel)
-# Modèles disponibles : tiny, base, small, medium, large-v2, large-v3
-# "base" = bon équilibre vitesse/qualité pour le français
+# Le modèle est choisi via l'ARG WHISPER_MODEL (défaut : base)
 RUN python -c "\
+import os; \
+model = os.environ.get('WHISPER_MODEL', '${WHISPER_MODEL}'); \
 from faster_whisper import WhisperModel; \
-print('Téléchargement du modèle Whisper base...'); \
-WhisperModel('base', device='cpu', download_root='/models'); \
+print(f'Téléchargement du modèle Whisper {model}...'); \
+WhisperModel(model, device='cpu', download_root='/models'); \
 print('Modèle prêt.')"
 
 COPY app.py .

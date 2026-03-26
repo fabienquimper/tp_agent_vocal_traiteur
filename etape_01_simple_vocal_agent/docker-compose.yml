@@ -35,6 +35,8 @@ services:
     build:
       context: ./services/stt
       dockerfile: Dockerfile
+      args:
+        WHISPER_MODEL: ${WHISPER_MODEL:-base}
     container_name: traiteur_stt
     ports:
       - "8001:8001"
