@@ -1,0 +1,23 @@
+# ─── API & Web ───────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+pydantic-settings==2.5.2
+httpx==0.27.2
+
+# ─── LangChain & LangGraph ───────────────────────────────────────────────────
+langchain==0.3.7
+langchain-community==0.3.7
+langchain-ollama==0.2.1
+langchain-chroma==0.1.4
+langgraph==0.2.35
+
+# ─── Embeddings (modèle local, pas besoin d'API externe) ─────────────────────
+sentence-transformers==3.2.1
+langchain-huggingface==0.1.2
+
+# ─── Base vectorielle ────────────────────────────────────────────────────────
+chromadb==0.5.18
+
+# ─── Commandes Excel ─────────────────────────────────────────────────────────
+openpyxl==3.1.5

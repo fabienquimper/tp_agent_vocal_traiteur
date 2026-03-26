@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traiteur Dupont – Assistant Vocal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- En-tête -->
+    <header class="header">
+      <div class="header-content">
+        <span class="logo">🍽️</span>
+        <div>
+          <h1>Traiteur Dupont</h1>
+          <p>Assistant vocal intelligent</p>
+        </div>
+        <div class="status-dot" id="statusDot" title="État du service"></div>
+      </div>
+    </header>
+
+    <!-- Zone de conversation -->
+    <main class="chat-area" id="chatArea">
+      <div class="message bot">
+        <div class="avatar">🤖</div>
+        <div class="bubble">
+          Bonjour ! Je suis l'assistant du Traiteur Dupont.<br>
+          Je peux vous renseigner sur nos <strong>menus</strong>, nos <strong>horaires</strong>,
+          nos <strong>congés</strong>, et prendre vos <strong>commandes</strong>.<br>
+          Comment puis-je vous aider ?
+        </div>
+      </div>
+    </main>
+
+    <!-- Barre d'état -->
+    <div class="status-bar" id="statusBar"></div>
+
+    <!-- Zone de saisie -->
+    <footer class="input-area">
+      <div class="input-row">
+        <input
+          type="text"
+          id="textInput"
+          placeholder="Tapez votre message..."
+          autocomplete="off"
+        />
+        <button id="sendBtn" class="btn btn-send" title="Envoyer">
+          &#9658;
+        </button>
+      </div>
+      <div class="voice-row">
+        <button id="micBtn" class="btn btn-mic">
+          <span class="mic-icon">🎤</span>
+          <span id="micLabel">Maintenir pour parler</span>
+        </button>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRAITEUR DUPONT – Agent Vocal IA
+# Étape 01 : Architecture de base
+#
+# Services :
+#   ollama  → LLM local (Mistral)
+#   stt     → Speech-to-Text (faster-whisper)
+#   tts     → Text-to-Speech (piper-tts, voix française)
+#   agent   → Orchestrateur LangGraph + RAG + Commandes Excel
+#   ui      → Interface web (nginx)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── LLM Local ───────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: traiteur_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Speech-to-Text (Whisper) ─────────────────────────────────────────────────
+  stt:
+    build:
+      context: ./services/stt
+      dockerfile: Dockerfile
+    container_name: traiteur_stt
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ── Text-to-Speech (Piper TTS) ───────────────────────────────────────────────
+  tts:
+    build:
+      context: ./services/tts
+      dockerfile: Dockerfile
+    container_name: traiteur_tts
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ── Agent IA (LangGraph + RAG + Commandes) ───────────────────────────────────
+  agent:
+    build:
+      context: ./services/agent
+      dockerfile: Dockerfile
+    container_name: traiteur_agent
+    ports:
+      - "8000:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+      stt:
+        condition: service_healthy
+      tts:
+        condition: service_healthy
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - STT_SERVICE_URL=http://stt:8001
+      - TTS_SERVICE_URL=http://tts:8002
+      - LLM_MODEL=${LLM_MODEL:-mistral}
+      - ORDER_COMPLEXITY_THRESHOLD=${ORDER_COMPLEXITY_THRESHOLD:-6}
+      - DATA_DIR=/app/data
+      - ORDERS_DIR=/app/orders
+      - CHROMA_DIR=/app/chroma
+    volumes:
+      - ./data:/app/data:ro          # Fichiers de l'entreprise (lecture seule)
+      - ./orders:/app/orders          # Fichiers Excel générés
+      - chroma_data:/app/chroma       # Base vectorielle persistante
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+  # ── Interface Web ────────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: traiteur_ui
+    ports:
+      - "3000:80"
+    depends_on:
+      agent:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  chroma_data:
