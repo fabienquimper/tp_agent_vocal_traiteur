@@ -23,11 +23,11 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
-      interval: 30s
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
   # ── Speech-to-Text (Whisper) ─────────────────────────────────────────────────
@@ -40,10 +40,10 @@ services:
       - "8001:8001"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
-      interval: 30s
+      interval: 20s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 8
+      start_period: 120s
     restart: unless-stopped
 
   # ── Text-to-Speech (Piper TTS) ───────────────────────────────────────────────

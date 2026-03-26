@@ -3,8 +3,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
 .PHONY: help build up down logs init-ollama reload-docs test clean dev
 
-COMPOSE = docker compose
 AGENT_URL = http://localhost:8000
+
+# Détection GPU : nvidia-container-cli doit charger les libs avec succès
+HAS_GPU := $(shell nvidia-container-cli info > /dev/null 2>&1 && echo "yes" || echo "no")
+ifeq ($(HAS_GPU),yes)
+  GPU_FLAGS = -f docker-compose.yml -f docker-compose.gpu.yml
+  GPU_MSG   = GPU NVIDIA detecte
+else
+  GPU_FLAGS =
+  GPU_MSG   = mode CPU
+endif
+
+COMPOSE = docker compose $(GPU_FLAGS)
 
 ## help : Affiche cette aide
 help:
@@ -24,6 +35,7 @@ build-nocache:
 
 ## up : Démarre tous les services
 up:
+	@echo "Mode :$(GPU_MSG)"
 	$(COMPOSE) up -d
 	@echo ""
 	@echo "✓ Services démarrés"

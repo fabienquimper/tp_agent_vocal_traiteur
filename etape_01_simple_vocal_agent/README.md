@@ -73,8 +73,97 @@ Le seuil est configurable via `ORDER_COMPLEXITY_THRESHOLD` dans `.env`.
 
 ### Prérequis
 
-- Docker Desktop ≥ 24 avec Docker Compose
+- Docker Engine ≥ 24 avec Docker Compose
 - 8 Go de RAM minimum recommandés (Mistral 7B ~4 Go)
+
+### Résolution des problèmes connus (Ubuntu 24.04 Noble + Docker 28.x)
+
+#### Bug iptables : `Chain 'DOCKER-ISOLATION-STAGE-2' does not exist`
+
+Docker 28.x sur Ubuntu 24.04 avec kernel 6.x utilise `iptables-nft` en interne et oublie de créer la chaîne `DOCKER-ISOLATION-STAGE-2` au démarrage. Symptôme :
+
+```
+failed to create network: iptables v1.8.10 (nf_tables): Chain 'DOCKER-ISOLATION-STAGE-2' does not exist
+```
+
+**Fix immédiat** (à relancer après chaque redémarrage de Docker si le service ci-dessous n'est pas installé) :
+
+```bash
+sudo iptables-nft -t filter -N DOCKER-ISOLATION-STAGE-1 2>/dev/null || true
+sudo iptables-nft -t filter -N DOCKER-ISOLATION-STAGE-2 2>/dev/null || true
+```
+
+**Fix persistant** (crée un service systemd qui tourne avant Docker) :
+
+```bash
+sudo tee /etc/systemd/system/docker-iptables-fix.service << 'EOF'
+[Unit]
+Description=Cree les chaines iptables manquantes pour Docker 28.x
+After=network.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/iptables-nft -t filter -N DOCKER-ISOLATION-STAGE-1
+ExecStart=/usr/sbin/iptables-nft -t filter -N DOCKER-ISOLATION-STAGE-2
+IgnoreExitCode=yes
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now docker-iptables-fix
+```
+
+#### GPU NVIDIA (optionnel) — RTX 4070 / RTX 3xxx etc.
+
+Ollama utilise automatiquement le GPU si `nvidia-container-toolkit` est installé.
+
+```bash
+# 1. Clé GPG
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg --yes
+
+# 2. Dépôt (une seule ligne)
+echo "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/amd64 /" | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+# 3. Installer
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+
+# 4. Configurer Docker
+sudo nvidia-ctk runtime configure --runtime=docker
+
+# 5. Générer le spec CDI (décrit les devices GPU pour Docker)
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+
+# 6. Ajouter libnvidia-ml au cache ldconfig
+#    (la lib n'a pas de SONAME donc ldconfig ne la trouve pas automatiquement)
+echo "/usr/lib/x86_64-linux-gnu" | sudo tee /etc/ld.so.conf.d/nvidia-ml.conf
+sudo ldconfig
+
+# 7. Forcer le mode CDI dans le runtime nvidia
+sudo sed -i 's/^mode = "auto"/mode = "cdi"/' /etc/nvidia-container-runtime/config.toml
+sudo sed -i 's/skip-mode-detection = false/skip-mode-detection = true/' /etc/nvidia-container-runtime/config.toml
+
+# 8. Redémarrer Docker + recréer les chaînes iptables (bug Docker 28.x)
+sudo systemctl restart docker
+sudo iptables-nft -t filter -N DOCKER-ISOLATION-STAGE-1 2>/dev/null || true
+sudo iptables-nft -t filter -N DOCKER-ISOLATION-STAGE-2 2>/dev/null || true
+
+# 9. Vérifier (doit afficher le modèle GPU)
+nvidia-container-cli info
+```
+
+> **Architecture GPU dans ce projet** : seul Ollama (LLM) utilise le GPU via
+> `runtime: nvidia` + `NVIDIA_VISIBLE_DEVICES=all`. Le service STT (faster-whisper)
+> reste en CPU car son image `python:3.11-slim` ne contient pas CUDA.
+>
+> **Pourquoi `runtime: nvidia` plutôt que `deploy.resources` ?** L'approche
+> `deploy.resources.reservations.devices` fait injecter le hook par Docker lui-même,
+> qui ignore `config.toml`. Avec `runtime: nvidia`, c'est `nvidia-container-runtime`
+> qui gère l'injection et lit correctement la configuration CDI.
+
+Le Makefile détecte automatiquement le GPU (`nvidia-container-cli info`) et charge `docker-compose.gpu.yml` si disponible.
 
 ### 1. Cloner / se positionner
 

@@ -21,8 +21,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ── Modèle chargé une seule fois au démarrage ─────────────────────────────────
-MODEL_SIZE = os.getenv("WHISPER_MODEL", "base")
-MODEL_DIR = "/models"
+MODEL_SIZE   = os.getenv("WHISPER_MODEL", "base")
+MODEL_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
+MODEL_DIR    = "/models"
 
 model: WhisperModel = None
 
@@ -30,8 +31,8 @@ model: WhisperModel = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model
-    logger.info(f"Chargement du modèle Whisper '{MODEL_SIZE}'...")
-    model = WhisperModel(MODEL_SIZE, device="cpu", download_root=MODEL_DIR)
+    logger.info(f"Chargement du modèle Whisper '{MODEL_SIZE}' sur {MODEL_DEVICE}...")
+    model = WhisperModel(MODEL_SIZE, device=MODEL_DEVICE, download_root=MODEL_DIR)
     logger.info("Modèle Whisper prêt.")
     yield
 
