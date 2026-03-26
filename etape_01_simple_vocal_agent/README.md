@@ -297,3 +297,9 @@ etape_01_simple_vocal_agent/
 - **Étape 04** : Sécurité (auth, rate limiting, détection prompt injection)
 - **Étape 05** : CI/CD (GitHub Actions : lint → test → build → deploy)
 - **Étape 06** : Déploiement Kubernetes + HPA
+
+# Interface
+
+Voici un exemple d'interface d'échange (avec transcription audio)
+
+![alt text](image.png)

@@ -13,6 +13,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
+import httpx
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -76,6 +77,47 @@ class AgentResponse(BaseModel):
     order_items: list        # Articles commandés (vide si intent != commande)
     response_text: str       # Réponse textuelle de l'agent
     audio_base64: Optional[str] = None  # Audio WAV encodé en base64 (si TTS activé)
+    is_error: bool = False   # True si la réponse est un message d'erreur technique
+
+
+# ── Détection des erreurs Ollama ──────────────────────────────────────────────
+
+def _is_ollama_unavailable(exc: Exception) -> bool:
+    """Détecte si l'exception est due à Ollama inaccessible (parcourt toute la chaîne)."""
+    checked = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in checked:
+        checked.add(id(current))
+        if isinstance(current, (httpx.ConnectError, httpx.ConnectTimeout, httpx.RemoteProtocolError)):
+            return True
+        msg = f"{type(current).__name__} {current}".lower()
+        if any(kw in msg for kw in ("connection refused", "connecterror", "connectionrefused")):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _friendly_error_response(transcript: str, exc: Exception) -> AgentResponse:
+    """Retourne une réponse lisible en cas d'erreur interne."""
+    if _is_ollama_unavailable(exc):
+        message = (
+            "Je suis désolé, le service de traitement IA (Ollama/Mistral) est actuellement "
+            "indisponible. Vérifiez que tous les services sont démarrés (`make up`) et que "
+            "le modèle Mistral est téléchargé (`make init-ollama`)."
+        )
+    else:
+        message = (
+            "Je suis désolé, une erreur technique s'est produite. "
+            "Veuillez réessayer dans quelques instants ou contacter directement notre boutique."
+        )
+    return AgentResponse(
+        transcript=transcript,
+        intent="",
+        order_items=[],
+        response_text=message,
+        audio_base64=None,
+        is_error=True,
+    )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -142,8 +184,8 @@ async def process_voice(
         result = graph.invoke(initial_state)
         return _state_to_response(result)
     except Exception as exc:
-        logger.error(f"Erreur traitement vocal : {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error(f"Erreur traitement vocal : {exc}", exc_info=True)
+        return _friendly_error_response(initial_state.get("text_input", ""), exc)
 
 
 @app.post("/api/text", response_model=AgentResponse)
@@ -167,8 +209,49 @@ async def process_text(request: TextRequest):
         result = graph.invoke(initial_state)
         return _state_to_response(result)
     except Exception as exc:
-        logger.error(f"Erreur traitement texte : {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error(f"Erreur traitement texte : {exc}", exc_info=True)
+        return _friendly_error_response(request.text, exc)
+
+
+@app.get("/api/status")
+async def get_status():
+    """Vérifie l'état de tous les services (Ollama, STT, TTS, RAG)."""
+    from .config import settings as cfg
+
+    results: dict = {}
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        # Ollama
+        try:
+            r = await client.get(f"{cfg.ollama_base_url}/api/tags")
+            models = [m["name"] for m in r.json().get("models", [])]
+            results["ollama"] = {"status": "ok", "models": models}
+        except Exception as exc:
+            results["ollama"] = {"status": "error", "error": str(exc)}
+
+        # STT
+        try:
+            r = await client.get(f"{cfg.stt_service_url}/health")
+            results["stt"] = {"status": "ok" if r.is_success else "error"}
+        except Exception as exc:
+            results["stt"] = {"status": "error", "error": str(exc)}
+
+        # TTS
+        try:
+            r = await client.get(f"{cfg.tts_service_url}/health")
+            results["tts"] = {"status": "ok" if r.is_success else "error"}
+        except Exception as exc:
+            results["tts"] = {"status": "error", "error": str(exc)}
+
+    # RAG chunk count
+    try:
+        count = get_retriever().vectorstore._collection.count()
+        results["rag"] = {"status": "ok", "chunks": count}
+    except Exception as exc:
+        results["rag"] = {"status": "error", "error": str(exc)}
+
+    overall = "ok" if all(v["status"] == "ok" for v in results.values()) else "degraded"
+    return {"status": overall, "services": results}
 
 
 @app.post("/api/reload-documents")

@@ -54,11 +54,20 @@ body {
 .header h1 { font-size: 1.2rem; font-weight: 700; }
 .header p  { font-size: .8rem; opacity: .85; }
 
+.status-link {
+  margin-left: auto;
+  color: rgba(255,255,255,.75);
+  font-size: 1.1rem;
+  text-decoration: none;
+  line-height: 1;
+  transition: opacity .2s;
+}
+.status-link:hover { opacity: 1; color: #fff; }
+
 .status-dot {
   width: 12px; height: 12px;
   border-radius: 50%;
   background: #aaa;
-  margin-left: auto;
   flex-shrink: 0;
   transition: background .4s;
 }
@@ -194,4 +203,33 @@ body {
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239,83,80,.4); }
   50%       { box-shadow: 0 0 0 8px rgba(239,83,80,0); }
+}
+
+/* ── Bouton lecture audio ─────────────────────────────────────────────────── */
+.btn-play-audio {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 4px 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 20px;
+  background: transparent;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+  opacity: .8;
+}
+.message.user .btn-play-audio { color: var(--accent); }
+.message.bot  .btn-play-audio { color: var(--primary); }
+.btn-play-audio:hover { opacity: 1; background: rgba(0,0,0,.06); }
+.btn-play-audio:active { transform: scale(.96); }
+
+/* ── Transcription du message vocal ──────────────────────────────────────── */
+.audio-transcript {
+  margin-top: 4px;
+  font-size: .82rem;
+  color: var(--text-muted);
+  font-style: italic;
 }

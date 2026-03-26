@@ -41,8 +41,8 @@ def transcribe_audio(state: AgentState) -> dict:
     Si text_input est déjà renseigné (appel texte direct), passe son tour.
     """
     if not state.get("audio_bytes"):
-        # Entrée texte directe : rien à transcrire
-        return {}
+        # Entrée texte directe : rien à transcrire, on conserve text_input tel quel
+        return {"text_input": state.get("text_input", "")}
 
     try:
         with httpx.Client(timeout=60) as client:
@@ -172,13 +172,13 @@ def process_order(state: AgentState) -> dict:
 
     if not order_items:
         logger.warning("Commande sans articles – rien à écrire")
-        return {}
+        return {"order_items": []}
 
     try:
         write_order(order_items, is_complex=is_complex)
         file_type = "complexe" if is_complex else "simple"
         logger.info(f"Commande {file_type} enregistrée : {order_items}")
-        return {}
+        return {"order_items": order_items}
     except Exception as exc:
         logger.error(f"Erreur écriture Excel : {exc}")
         return {"error": str(exc)}
