@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="390" height="844" font-family="'Segoe UI', system-ui, sans-serif">
+
+  <!-- Page background -->
+  <rect width="390" height="844" fill="#F5F5F0"/>
+
+  <!-- App container / white surface -->
+  <rect x="0" y="0" width="390" height="844" fill="#FFFFFF" rx="0"/>
+
+  <!-- ── HEADER ────────────────────────────────────────────────── -->
+  <rect x="0" y="0" width="390" height="64" fill="#2E7D32"/>
+
+  <!-- Logo emoji zone -->
+  <text x="20" y="42" font-size="28" fill="#FFFFFF">🍽️</text>
+
+  <!-- Title + subtitle -->
+  <text x="60" y="34" font-size="17" font-weight="700" fill="#FFFFFF">Traiteur Dupont</text>
+  <text x="60" y="52" font-size="12" fill="rgba(255,255,255,0.85)">Assistant de commande</text>
+
+  <!-- Status dot (online) -->
+  <circle cx="362" cy="28" r="6" fill="#69F0AE"/>
+  <!-- Dashboard icon -->
+  <text x="340" y="52" font-size="16" fill="rgba(255,255,255,0.75)">📋</text>
+  <!-- Settings icon -->
+  <text x="364" y="52" font-size="16" fill="rgba(255,255,255,0.75)">⚙</text>
+
+  <!-- ── CHAT AREA ──────────────────────────────────────────────── -->
+  <!-- Chat background -->
+  <rect x="0" y="64" width="390" height="676" fill="#FFFFFF"/>
+
+  <!-- ── Message 1 : bot welcome ── -->
+  <!-- Avatar -->
+  <text x="16" y="112" font-size="22">🤖</text>
+
+  <!-- Bot bubble -->
+  <rect x="46" y="84" width="260" height="76" rx="12" fill="#E8F5E9"/>
+  <rect x="46" y="148" width="16" height="12" rx="2" fill="#E8F5E9"/>
+  <text x="58" y="104" font-size="14" fill="#212121">Bonjour ! Je suis l'assistant</text>
+  <text x="58" y="122" font-size="14" fill="#212121">Traiteur Dupont. Que puis-je</text>
+  <text x="58" y="140" font-size="14" fill="#212121">faire pour vous ?</text>
+
+  <!-- Intent badge -->
+  <rect x="46" y="164" width="72" height="18" rx="9" fill="rgba(0,0,0,0.08)"/>
+  <text x="58" y="177" font-size="10" fill="#757575">accueil</text>
+
+  <!-- ── Message 2 : user ── -->
+  <!-- User bubble -->
+  <rect x="108" y="194" width="266" height="44" rx="12" fill="#FFF3E0"/>
+  <rect x="358" y="226" width="16" height="12" rx="2" fill="#FFF3E0"/>
+  <text x="120" y="214" font-size="14" fill="#212121">Je voudrais commander</text>
+  <text x="120" y="232" font-size="14" fill="#212121">un bœuf bourguignon</text>
+
+  <!-- Intent badge user -->
+  <rect x="274" y="242" width="100" height="18" rx="9" fill="rgba(0,0,0,0.08)"/>
+  <text x="286" y="255" font-size="10" fill="#757575">commande_simple</text>
+
+  <!-- ── Message 3 : bot confirms order ── -->
+  <!-- Avatar -->
+  <text x="16" y="296" font-size="22">🤖</text>
+
+  <!-- Bot bubble -->
+  <rect x="46" y="268" width="300" height="96" rx="12" fill="#E8F5E9"/>
+  <rect x="46" y="352" width="16" height="12" rx="2" fill="#E8F5E9"/>
+  <text x="58" y="288" font-size="14" fill="#212121">Parfait ! J'ai noté :</text>
+  <text x="58" y="306" font-size="14" fill="#212121">• Bœuf bourguignon — 48,00 €</text>
+  <text x="58" y="324" font-size="14" fill="#212121">Pourriez-vous me donner votre</text>
+  <text x="58" y="342" font-size="14" fill="#212121">nom et prénom ?</text>
+
+  <!-- Total badge -->
+  <rect x="46" y="368" width="106" height="22" rx="11" fill="#E8F5E9" stroke="#A5D6A7" stroke-width="1"/>
+  <text x="58" y="383" font-size="12" font-weight="600" fill="#2E7D32">Total : 48,00 €</text>
+
+  <!-- ── Message 4 : user gives name ── -->
+  <rect x="146" y="402" width="228" height="44" rx="12" fill="#FFF3E0"/>
+  <rect x="358" y="434" width="16" height="12" rx="2" fill="#FFF3E0"/>
+  <text x="158" y="422" font-size="14" fill="#212121">Martin Sophie,</text>
+  <text x="158" y="440" font-size="14" fill="#212121">06 12 34 56 78</text>
+
+  <!-- ── Message 5 : bot asks payment ── -->
+  <!-- Avatar -->
+  <text x="16" y="484" font-size="22">🤖</text>
+
+  <!-- Bot bubble -->
+  <rect x="46" y="456" width="280" height="76" rx="12" fill="#E8F5E9"/>
+  <rect x="46" y="520" width="16" height="12" rx="2" fill="#E8F5E9"/>
+  <text x="58" y="476" font-size="14" fill="#212121">Merci Sophie ! Quel est votre</text>
+  <text x="58" y="494" font-size="14" fill="#212121">moyen de paiement ?</text>
+  <text x="58" y="512" font-size="13" fill="#757575">CB ou paiement sur place</text>
+
+  <!-- ── Message 6 : user says CB ── -->
+  <rect x="298" y="536" width="76" height="30" rx="12" fill="#FFF3E0"/>
+  <rect x="358" y="554" width="16" height="12" rx="2" fill="#FFF3E0"/>
+  <text x="312" y="556" font-size="14" fill="#212121">Par CB</text>
+
+  <!-- ── Payment form ── -->
+  <rect x="46" y="576" width="286" height="160" rx="12" fill="#FFFDE7" stroke="#FFE082" stroke-width="1.5"/>
+
+  <!-- Payment title -->
+  <text x="62" y="598" font-size="14" font-weight="700" fill="#212121">💳 Paiement sécurisé</text>
+  <text x="62" y="614" font-size="12" fill="#757575">Montant : 48,00 €</text>
+
+  <!-- Card number field -->
+  <rect x="62" y="622" width="254" height="34" rx="8" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.5"/>
+  <text x="74" y="644" font-size="13" font-family="monospace" fill="#BDBDBD">4242  4242  4242  4242</text>
+
+  <!-- Expiry + CVV -->
+  <rect x="62" y="662" width="120" height="34" rx="8" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.5"/>
+  <text x="74" y="684" font-size="13" font-family="monospace" fill="#BDBDBD">MM/AA</text>
+  <rect x="196" y="662" width="120" height="34" rx="8" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.5"/>
+  <text x="208" y="684" font-size="13" font-family="monospace" fill="#BDBDBD">CVV</text>
+
+  <!-- Pay button -->
+  <rect x="62" y="702" width="254" height="22" rx="11" fill="#2E7D32"/>
+  <text x="139" y="717" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" x="189">Payer 48,00 €</text>
+  <text x="189" y="717" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">Payer 48,00 €</text>
+
+  <!-- ── STATUS BAR ─────────────────────────────────────────────── -->
+  <rect x="0" y="740" width="390" height="28" fill="#FAFAFA" stroke="#EEEEEE" stroke-width="1"/>
+  <text x="16" y="758" font-size="11" fill="#757575">✅ Service en ligne — Agent prêt</text>
+
+  <!-- ── INPUT AREA ─────────────────────────────────────────────── -->
+  <rect x="0" y="768" width="390" height="76" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+
+  <!-- Text input row -->
+  <rect x="12" y="780" width="326" height="40" rx="20" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.5"/>
+  <text x="28" y="805" font-size="14" fill="#9E9E9E">Votre message...</text>
+
+  <!-- Send button -->
+  <rect x="344" y="780" width="40" height="40" rx="20" fill="#2E7D32"/>
+  <text x="364" y="806" font-size="16" fill="#FFFFFF" text-anchor="middle">▶</text>
+
+  <!-- Mic button -->
+  <rect x="12" y="826" width="366" height="10" rx="5" fill="#F5F5F5" stroke="#E0E0E0" stroke-width="1.5"/>
+  <text x="195" y="835" font-size="10" fill="#757575" text-anchor="middle">🎤  Maintenir pour parler</text>
+
+</svg>
