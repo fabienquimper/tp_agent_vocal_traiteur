@@ -1,0 +1,15 @@
+# Dépendances pour le script de benchmark STT
+# Installation : pip install -r requirements-benchmark.txt
+#
+# Ces packages s'installent sur la MACHINE HÔTE (pas dans Docker).
+# Le script benchmark_stt.py appelle les services Docker via HTTP.
+
+# Client HTTP asynchrone (déjà utilisé dans l'agent)
+httpx==0.27.2
+
+# Word Error Rate — la métrique standard pour évaluer la qualité STT
+# WER = (substitutions + insertions + suppressions) / nb_mots_référence
+# WER = 0% → transcription parfaite
+# WER = 100% → toutes les mots sont faux
+# Source : https://github.com/jitsi/jiwer
+jiwer==3.0.4

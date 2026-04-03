@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# kind-config.yaml — Cluster Kubernetes local (kind)
+# Étape 07 : Déploiement K8s
+#
+# kind (Kubernetes IN Docker) crée un cluster K8s complet dans des conteneurs
+# Docker. C'est le standard pour tester K8s en local.
+#
+# Usage :
+#   kind create cluster --config kind-config.yaml
+#   kind delete cluster --name traiteur
+#
+# extraPortMappings :
+#   Permet d'accéder aux services K8s depuis localhost.
+#   containerPort = NodePort K8s sur le "nœud" kind
+#   hostPort      = port sur votre machine
+# ─────────────────────────────────────────────────────────────────────────────
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: traiteur
+
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30000   # agent API
+        hostPort: 8000
+        protocol: TCP
+      - containerPort: 30080   # UI web
+        hostPort: 3000
+        protocol: TCP
+      - containerPort: 30090   # Prometheus
+        hostPort: 9090
+        protocol: TCP
+      - containerPort: 30031   # Grafana
+        hostPort: 3001
+        protocol: TCP
+      - containerPort: 30434   # Ollama (pour make k8s-init-ollama)
+        hostPort: 11434
+        protocol: TCP

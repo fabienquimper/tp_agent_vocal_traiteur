@@ -1,0 +1,152 @@
+{{/*
+rbac.yaml — ServiceAccounts, Roles, RoleBindings, ClusterRole
+Conditionnel : {{ if .Values.security.rbac.create }}
+En CI : security.rbac.create=true (le SA agent-sa est toujours nécessaire).
+
+Comparer avec k8s/rbac/rbac.yaml (YAML brut étape 12) :
+  Avant : namespace: traiteur  (hardcodé partout)
+  Après : namespace: {{ .Values.namespace }}
+
+  Avant : fichier unique, toujours appliqué
+  Après : conditionnel — peut être désactivé si les SA existent déjà
+          (exemple : SA créés par l'équipe ops dans un namespace partagé)
+
+Note : le ClusterRole prometheus-cluster-role est toujours créé
+(requis pour le service discovery même si prometheus est dans le même namespace).
+*/}}
+
+{{- if .Values.security.rbac.create }}
+# ══════════════════════════════════════════════════════════════════════════════
+# ServiceAccounts — identités des pods
+# ══════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-sa
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+  annotations:
+    rbac.traiteur/purpose: "Agent IA — accès lecture ConfigMaps uniquement"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-sa
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+  annotations:
+    rbac.traiteur/purpose: "Prometheus — service discovery K8s"
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# Roles — permissions dans le namespace
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Rôle Agent : lecture des ConfigMaps uniquement (principe du moindre privilège)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-role
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+
+---
+# Rôle Prometheus : service discovery (pods + endpoints + services)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-role
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "endpoints", "services"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# RoleBindings — associe un Role à un ServiceAccount
+# ══════════════════════════════════════════════════════════════════════════════
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-rolebinding
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: agent-sa
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: agent-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-rolebinding
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: prometheus-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# ClusterRole Prometheus — service discovery cross-namespace
+# Un Role est limité à un namespace. Pour scraper kube-system etc.
+# Prometheus a besoin d'un ClusterRole.
+# ══════════════════════════════════════════════════════════════════════════════
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-cluster-role
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions", "networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-cluster-rolebinding
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: prometheus-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

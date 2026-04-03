@@ -4,3 +4,11 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

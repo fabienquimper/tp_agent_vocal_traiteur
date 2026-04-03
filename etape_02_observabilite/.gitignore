@@ -1,0 +1,26 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Commandes générées
+orders/*.xlsx
+
+# Base vectorielle locale (dev)
+services/agent/chroma_dev/
+
+# Modèles locaux (téléchargés dans les images Docker)
+models/
+voices/
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp

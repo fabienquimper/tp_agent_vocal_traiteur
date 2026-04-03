@@ -1,0 +1,76 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration Prometheus — Agent Vocal Traiteur
+# Étape 03 : Benchmark Whisper + Blue/Green
+#
+# Nouveauté vs étape 02 :
+#   Les services STT (blue et green) sont maintenant scrapés séparément.
+#   Cela permet de comparer les métriques de santé des deux instances
+#   pendant et après le switch Blue/Green.
+#
+#   Note : les services STT n'exposent PAS encore de métriques Prometheus
+#   au format texte (ils n'ont pas de /metrics). Prometheus scrape uniquement
+#   leur endpoint /health pour détecter s'ils sont UP ou DOWN.
+#   → "blackbox monitoring" vs "whitebox monitoring"
+#
+#   Blackbox : on observe de l'extérieur (UP/DOWN, temps de réponse)
+#   Whitebox : on observe de l'intérieur (nb de requêtes, WER, latence)
+#   L'étape 02 a ajouté le whitebox sur l'agent.
+#   Une étape future ajoutera le whitebox sur les services STT.
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: "dev"
+    project: "traiteur-dupont"
+
+scrape_configs:
+
+  # ── Agent IA — métriques whitebox complètes ──────────────────────────────────
+  - job_name: "agent-vocal"
+    static_configs:
+      - targets: ["agent:8000"]
+        labels:
+          service: "agent"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # ── STT Blue — monitoring blackbox (UP/DOWN seulement) ──────────────────────
+  # Prometheus scrape /health et stocke le résultat (1=UP, 0=DOWN).
+  # Si stt-blue tombe pendant le benchmark, on le voit immédiatement ici.
+  # PromQL : up{job="stt-blue"}
+  - job_name: "stt-blue"
+    metrics_path: /health
+    # Blackbox workaround : /health retourne du JSON, pas du format Prometheus.
+    # On utilise l'option de scrape "honor_labels" false + module json pour parser
+    # mais c'est complexe. Solution simple : on utilise juste up{} pour savoir
+    # si le service répond (1) ou non (0).
+    static_configs:
+      - targets: ["stt-blue:8001"]
+        labels:
+          service: "stt"
+          model: "whisper-base"
+          color: "blue"
+    scrape_interval: 30s
+    scrape_timeout: 5s
+
+  # ── STT Green — monitoring blackbox ─────────────────────────────────────────
+  - job_name: "stt-green"
+    metrics_path: /health
+    static_configs:
+      - targets: ["stt-green:8001"]
+        labels:
+          service: "stt"
+          model: "whisper-small"
+          color: "green"
+    scrape_interval: 30s
+    scrape_timeout: 5s
+
+  # ── Prometheus lui-même ──────────────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"

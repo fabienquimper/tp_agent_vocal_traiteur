@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Chart.yaml — Métadonnées du Helm Chart
+# Étape 13 : Helm
+#
+# Un chart Helm = un package K8s réutilisable.
+# Il contient :
+#   Chart.yaml   → qui je suis (nom, version, description)
+#   values.yaml  → ma configuration par défaut (modifiable par l'utilisateur)
+#   templates/   → les manifestes K8s avec des placeholders {{ .Values.xxx }}
+#
+# Versioning :
+#   version     → version du chart lui-même (incompatibilités de templates)
+#   appVersion  → version de l'application déployée (pour l'affichage)
+#   Sémantique : MAJOR.MINOR.PATCH (SemVer)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v2
+name: traiteur
+description: |
+  Agent Vocal IA — Traiteur Dupont
+  Stack complète : Agent LangGraph + Ollama + Whisper STT + Piper TTS +
+  Prometheus + Grafana + Jaeger (OpenTelemetry)
+
+type: application
+
+# Version du chart (changer à chaque modification des templates)
+version: 1.0.0
+
+# Version de l'application déployée (affichée dans helm list)
+appVersion: "2.0.0"
+
+keywords:
+  - ai
+  - voice-agent
+  - langgraph
+  - mlops
+  - rag
+
+home: https://github.com/traiteur-dupont/tp-agent-vocal
+
+maintainers:
+  - name: TP MLOps
+    email: tp@example.com
+
+# Dépendances optionnelles (non utilisées ici — on gère tout en interne)
+# dependencies:
+#   - name: prometheus
+#     version: "25.x.x"
+#     repository: https://prometheus-community.github.io/helm-charts
+#     condition: monitoring.prometheus.external

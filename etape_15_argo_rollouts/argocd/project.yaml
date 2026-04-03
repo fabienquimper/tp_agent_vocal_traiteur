@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ArgoCD AppProject — traiteur
+#
+# Un AppProject scope les permissions d'une Application ArgoCD :
+#   - Quels dépôts Git peuvent être utilisés comme source
+#   - Quels clusters et namespaces peuvent être cibles
+#   - Quelles ressources K8s peuvent être créées/modifiées
+#
+# Principe du moindre privilège :
+#   En production on limiterait sourceRepos à l'URL exacte du dépôt.
+#   Ici on autorise '*' pour simplifier (TP pédagogique).
+#
+# ArgoCD installe ce projet dans son propre namespace "argocd".
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: traiteur
+  namespace: argocd
+  annotations:
+    # Empêche ArgoCD de supprimer ce projet si l'Application est supprimée
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: "Traiteur Dupont — Agent Vocal IA (TP GitOps)"
+
+  # Dépôts Git autorisés comme source
+  # '*' = tous (pratique pour un TP, à restreindre en production)
+  sourceRepos:
+    - '*'
+
+  # Clusters et namespaces cibles autorisés
+  destinations:
+    - namespace: traiteur
+      server: https://kubernetes.default.svc   # cluster local (in-cluster)
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+
+  # Ressources K8s autorisées au niveau cluster (pas namespaced)
+  # Nécessaire pour créer des Namespaces
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRole
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRoleBinding
+
+  # Ressources namespaced autorisées — tout ce que notre app utilise
+  namespaceResourceWhitelist:
+    - group: 'apps'
+      kind: Deployment
+    - group: 'autoscaling'
+      kind: HorizontalPodAutoscaler
+    - group: ''
+      kind: Service
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: PersistentVolumeClaim

@@ -1,0 +1,693 @@
+Etant donné que tu peux te baser sur l'étate 01. Que c'est un TP progressif. Je ne veux pas que tu modifie ce dossier de l'étape 1 en tant qu'expert pédagogique de l'informatique, du
+  déploimenet d'application et de l'intelligence artiificielle. Tu vas crée un dossier à chaque fois avec TOUT le projet pour pouvoir "builder" un apprentissage de plus. J'aimerais
+  que tu te base sur lorganisation étape par étape QUAND cela du sens pour ce projet EVIDEMMENT. Cette autre TP avait ces étapes (l'idée ici c'est de simuler le "déploiement" d'une app
+  IA pour des étudiants en jouant le plus possible avec comme si c'était de la production. (certaine étape de l'autre TP n'a pas de SENS ici car il y a déjà un agent vocal qui
+  fonctionne (mémoire RAG, rebuild de l'app, langgraph déjà intégrer, modèle Whister déjà là etc). Cependant tu peux ajouter une étape pertinente comme "déploiyer" un autre modèle
+  Whister (pour comparer?), déploier un nouveau RAG (s'il prends du temps comment faire en sorte que la mise en production presque que quleques milliseconds) Ca cela me permet
+  pertinent et nh'ésites pas à tuiliser des standards open sources de l'IA, MLOps , DevOps, CI/CD pour illustrer avec les étudiants (environnement prod / staging simuler aussi!). Voici
+  l'autre TP donc je t'ai parlé pour t'aider "[Pasted text #1 +655 lines]"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  # Présentation des étapes — TP Chatbot IA : du prototype au déploiement
+
+> **Usage** : Ce document est le prompt de référence pour présenter l'ensemble du projet.
+> Il donne le contexte, la progression pédagogique et les points saillants de chaque étape.
+> Les étapes 13 et 14 sont documentées en détail car elles constituent l'aboutissement technique du TP.
+
+## Contexte général
+
+Ce TP construit un chatbot d'entreprise de bout en bout — du premier appel API jusqu'au
+déploiement Kubernetes avec pipeline CI/CD. Chaque étape ajoute une brique, et chaque brique
+répond à un problème concret rencontré en production.
+
+**Stack finale :** Python · FastAPI · LangChain · ChromaDB · SQLite · Prometheus · Grafana ·
+Docker multi-stage · Nginx · JWT · pytest · Kubernetes (kind/GKE) · GitHub Actions · ArgoCD
+
+## Étapes 00 à 12 — Construction progressive
+
+### Étape 00 — Le Moteur
+
+**Ce qu'on fait :** Premier appel à un LLM (OpenAI ou modèle local via LM Studio).
+**Ce qu'on apprend :** Variables d'environnement, API REST d'OpenAI, concept cloud vs local.
+**Concept clé :** Le LLM est une boîte noire sans état — il ne retient rien entre les appels.
+
+### Étape 01 — Le Chatbot Naïf (La Banane)
+
+**Ce qu'on fait :** Un chatbot fonctionnel en ~15 lignes. On simule la mémoire en accumulant
+les messages dans une liste `msgs` envoyée à chaque appel.
+**Ce qu'on apprend :** Format `messages` (role: system/user/assistant), nature stateless du LLM,
+mémoire côté client = illusion.
+**Concept clé :** La "mémoire" n'est pas dans le modèle — elle est dans notre code. Si on
+redémarre le script, tout est perdu.
+
+### Étape 02 — Mesurer pour Comprendre (KPIs)
+
+**Ce qu'on fait :** Ajout de métriques en temps réel : latence, tokens/seconde, coût/requête, P95.
+**Ce qu'on apprend :** Mesurer avant d'optimiser. Différence cloud (~80 TPS) vs local (~15 TPS).
+Formule de coût : `(prompt_tokens × $0.00015 + completion_tokens × $0.00060) / 1000`.
+**Concept clé :** Sans mesure, on optimise au hasard. Le P95 capture les cas lents que la moyenne cache.
+
+### Étape 03 — La Mémoire Tampon
+
+**Ce qu'on fait :** Implémentation d'une fenêtre glissante (`MAX_HISTORY=8`) et d'un mode résumé
+automatique pour les longues conversations.
+**Ce qu'on apprend :** Le context window est une ressource limitée et payante. Stratégies :
+fenêtre fixe (simple) vs résumé (coûteux mais préserve l'essentiel).
+**Concept clé :** `coût ∝ nombre de tokens` — garder toute l'histoire est impraticable en prod.
+
+### Étape 04 — La Persistance
+
+**Ce qu'on fait :** Sauvegarde des conversations dans SQLite (et comparaison avec JSON).
+Sessions multi-utilisateurs, restauration au redémarrage.
+**Ce qu'on apprend :** SQLite vs JSON : race conditions, transactions ACID, scalabilité.
+`explorer_db.py` pour inspecter les données.
+**Concept clé :** JSON avec 1000 users simultanés = corruption garantie. SQLite gère les
+écritures concurrentes par verrous transactionnels.
+
+### Étape 05 — RAG (Retrieval-Augmented Generation)
+
+**Ce qu'on fait :** Connexion du chatbot à une base documentaire (ChromaDB). Indexation de
+fichiers `.txt` en chunks, recherche sémantique par embeddings, injection du contexte dans le prompt.
+**Ce qu'on apprend :** Pipeline RAG complet : embed → store → retrieve → inject → generate.
+KPI : Hit Rate > 80%.
+**Concept clé :** Le LLM ne "sait" que ce qu'on lui donne. RAG = mémoire longue terme
+externe, sans coût de contexte permanent.
+
+### Étape 06 — LangChain
+
+**Ce qu'on fait :** Refactorisation du code avec LangChain. Swap cloud/local en 1 ligne.
+`ConversationBufferWindowMemory`, `ConversationalRetrievalChain`.
+**Ce qu'on apprend :** Abstraction LLM — même code, backend différent. Gain : moins de
+boilerplate, plus de fonctionnalités.
+**Concept clé :** `ChatOpenAI` → `ChatOllama` en changeant une seule ligne. L'interopérabilité
+est la vraie valeur ajoutée de LangChain.
+
+### Étape 07 — Docker & FastAPI
+
+**Ce qu'on fait :** Exposition du chatbot via une API REST FastAPI. Containerisation Docker.
+Endpoints : `/health`, `/chat`, `/history/{id}`, `/sessions`, `/docs` (Swagger auto).
+**Ce qu'on apprend :** FastAPI, Pydantic, Docker build + run, docker-compose.
+**Concept clé :** L'API REST transforme le chatbot script en service interrogeable par
+n'importe quel client (web, mobile, autre service).
+
+### Étape 08 — Prometheus & Grafana
+
+**Ce qu'on fait :** Instrumentation avec `prometheus_client`. Dashboard Grafana avec
+latence P95, RPS, tokens, erreurs, mémoire processus.
+**Ce qu'on apprend :** Types de métriques (Counter, Histogram, Gauge), scraping Prometheus,
+PromQL de base, provisioning automatique de datasource.
+**Concept clé :** On ne peut pas corriger ce qu'on ne voit pas. Les métriques sont la
+fenêtre sur le comportement réel du service en production.
+
+### Étape 09 — Sécurité
+
+**Ce qu'on fait :** Authentification JWT, rate limiting (slowapi), filtrage prompt injection
+(12 patterns regex), sanitization XSS, CORS restreint, hachage bcrypt.
+**Ce qu'on apprend :** Chaque couche protège contre un vecteur d'attaque différent.
+**Concept clé :** Sécurité en profondeur — une seule couche ne suffit jamais.
+
+```
+Requête → CORS → Rate Limit → JWT → Sanitize → Prompt Guard → LLM
+```
+
+### Étape 10 — Test de Charge (Locust)
+
+**Ce qu'on fait :** Simulatiaon de 5 / 20 / 50 / 100 utilisateurs simultanés. Mesure du
+taux d'échec, P50, P95, RPS.
+**Ce qu'on apprend :** Identifier le goulot d'étranglement (API ? LLM ? DB ?). SLA réalistes :
+taux d'échec < 1%, P95 < 5s, RPS > 20.
+**Concept clé :** Le test de charge révèle les limites avant que les vrais utilisateurs les
+atteignent. Mieux vaut crasher en test qu'en prod.
+
+### Étape 11 — Tests automatisés (pytest)
+
+**Ce qu'on fait :** 3 niveaux de tests : unitaires (fonctions isolées, LLM mocké),
+intégration (API + DB, LLM mocké), E2E (API réelle). Coverage ≥ 70% requis.
+**Ce qu'on apprend :** Pourquoi mocker le LLM (rapidité, coût, déterminisme).
+`conftest.py` et fixtures partagées. `pytest --cov`.
+**Concept clé :** Un test qui appelle l'API OpenAI coûte $0.001 et prend 2s. Avec 100 tests
+lancés 50 fois par jour, c'est $5/jour juste pour les tests.
+
+### Étape 12 — Benchmark LLM
+
+**Ce qu'on fait :** Comparaison objective de plusieurs modèles (GPT-4o, GPT-4o-mini, Mistral 7B)
+sur un jeu de 20 questions. Notation automatique par LLM-as-Judge (score 1-10).
+**Ce qu'on apprend :** Évaluation reproductible. Rapport qualité/prix. `eval_set.jsonl` comme
+source de vérité.
+**Concept clé :** GPT-4o-mini : 8.2/10 pour $0.004 vs GPT-4o : 9.1/10 pour $0.024.
+Pour 90% des cas d'usage, le mini gagne. Le benchmark le prouve objectivement.
+
+## Étape 13 — Production-Ready (`etape_13_deployable`)
+
+### Vue d'ensemble
+
+L'étape 13 est la **synthèse du projet** : toutes les briques précédentes sont
+réunies, durcies pour la production, et livrées comme une application déployable.
+C'est la première étape où le code passe de "ça marche sur ma machine" à
+"ça peut tourner en production".
+
+```
+Étudiants arrivent avec → chatbot fonctionnel (étapes 00-12, séparées)
+Étape 13 produit        → application unifiée, testée, containerisée, monitorée
+```
+
+### Ce qui est assemblé
+
+
+| Fonctionnalité                    | Source        | Ajout étape 13                        |
+| ---------------------------------- | ------------- | -------------------------------------- |
+| LangChain + cloud/local swap       | Étape 06     | —                                     |
+| RAG ChromaDB (graceful fallback)   | Étapes 04/05 | Fallback si collection absente         |
+| Prometheus + Grafana               | Étape 08     | Métriques étendues (voir ci-dessous) |
+| JWT + Rate limiting + Prompt guard | Étape 09     | —                                     |
+| Suite de tests pytest              | Étape 11     | Intégrée au build Docker             |
+| **Dockerfile multi-stage**         | **Nouveau**   | Tests bloquants au build               |
+| **Nginx reverse proxy**            | **Nouveau**   | TLS, proxy pass, headers de sécurité |
+| **Script d'évaluation RAG**       | **Nouveau**   | `eval_set.jsonl` + score keywords      |
+| **Alertes Prometheus**             | **Nouveau**   | 5 règles d'alerte                     |
+| **Alertes Grafana**                | **Nouveau**   | Mémoire système > 95%                |
+
+### Architecture
+
+```
+Client
+  │
+  ├── dev  → FastAPI :8000 (direct)
+  └── prod → Nginx :443 → FastAPI :8000
+                           │
+           ┌───────────────┼──────────────────┐
+           │               │                  │
+     JWT + Rate      LangChain LLM        Prometheus
+     Limit +            │                  /metrics
+     Prompt Guard    ┌──┴──────────┐
+                     │  ChromaDB   │ ← RAG optionnel
+                     │  (optionnel)│   (fallback silencieux)
+                     └─────────────┘
+                          │
+             ┌────────────┴────────────┐
+             │                         │
+          SQLite                  Named volume
+          (historique)            /app/data/
+```
+
+### Le Dockerfile multi-stage — point pédagogique clé
+
+```dockerfile
+Stage 1 : builder     → apt + pip (dépendances)
+Stage 2 : test        → pytest (exit 1 si échec → build bloqué)
+Stage 3 : production  → image finale, user non-root, sans outils de build
+```
+
+**Pourquoi c'est important :**
+
+- Les tests font partie du pipeline de build — on ne peut pas livrer du code cassé
+- L'image finale ne contient pas `pytest`, `gcc`, ni les sources intermédiaires
+- L'image de prod est plus petite et moins exposée
+
+**Effet en pratique :**
+
+```bash
+make dev-bg   # échoue si un test est rouge → le développeur ne peut pas ignorer
+```
+
+### Métriques Prometheus étendues
+
+L'étape 13 va bien au-delà du monitoring basique de l'étape 08 :
+
+#### Métriques métier
+
+
+| Métrique                        | Type      | Nouveauté                                                         |
+| -------------------------------- | --------- | ------------------------------------------------------------------ |
+| `chat_requests_total`            | Counter   | Labels : modèle, status (`success`/`error`), rag (`true`/`false`) |
+| `chat_tokens_total`              | Counter   | Labels :`prompt`/`completion`                                      |
+| `chat_latency_seconds`           | Histogram | 8 buckets 0.1s → 30s                                              |
+| `rag_retrieval_seconds`          | Histogram | Latence ChromaDB séparément                                      |
+| `chat_context_messages`          | Gauge     | **Nouveau** — taille de l'historique à chaque requête           |
+| `chat_errors_total`              | Counter   | Par type d'exception                                               |
+| `auth_attempts_total`            | Counter   | Par status (`success`/`failure`)                                   |
+| `prompt_injection_blocked_total` | Counter   | Tentatives d'injection bloquées                                   |
+
+#### Métriques système (nouvelles)
+
+
+| Métrique                   | Type  | Description                            |
+| --------------------------- | ----- | -------------------------------------- |
+| `process_memory_bytes`      | Gauge | RAM RSS du processus Python            |
+| `system_memory_total_bytes` | Gauge | RAM totale de la machine hôte         |
+| `system_memory_used_bytes`  | Gauge | RAM utilisée sur la machine hôte     |
+| `process_cpu_percent`       | Gauge | CPU % du processus chatbot             |
+| `system_cpu_percent`        | Gauge | CPU % global du système               |
+| `gpu_utilization_percent`   | Gauge | GPU % par carte NVIDIA (si disponible) |
+| `gpu_memory_used_bytes`     | Gauge | VRAM utilisée par carte               |
+| `gpu_memory_total_bytes`    | Gauge | VRAM totale par carte                  |
+
+> Les métriques GPU utilisent `pynvml`. Détection automatique au démarrage :
+> si aucun GPU NVIDIA n'est présent, les jauges existent mais ne sont jamais renseignées
+> — les panels Grafana affichent "No data" sans erreur.
+
+### Dashboard Grafana
+
+Le dashboard `grafana/provisioning/dashboards/chatbot.json` contient ~550 lignes.
+Il est **provisionné automatiquement** (aucune action manuelle à l'import).
+
+**Panels :**
+
+- Requêtes totales + taux d'erreur (PromQL avec `or vector(0)` pour éviter "No data")
+- Latence P50 / P95 / P99
+- Tokens consommés (prompt vs completion)
+- Taux RAG vs direct
+- Mémoire : RSS processus + utilisée système + totale système (3 courbes)
+- CPU : processus + système (2 courbes)
+- GPU : utilisation % et VRAM (panels conditionnels)
+- Injections de prompt bloquées
+
+**Correctif clé :** La datasource doit avoir `uid: prometheus` (fixe) dans le YAML de
+provisioning. Sans ça, Grafana génère un uid aléatoire à chaque redémarrage — tous
+les panels perdent leur source et affichent "No data".
+
+### Alertes
+
+#### Prometheus (`prometheus-alerts.yml`)
+
+
+| Alerte                    | Condition                   | Sévérité |
+| ------------------------- | --------------------------- | ----------- |
+| `ChatbotDown`             | API indisponible > 1 min    | critical    |
+| `HighErrorRate`           | Taux erreur > 10% sur 5 min | warning     |
+| `HighLatency`             | P95 > 5s sur 5 min          | warning     |
+| `HighMemoryUsage`         | RAM processus > 500 MB      | warning     |
+| `PromptInjectionAttempts` | > 10 injections / 5 min     | warning     |
+
+#### Grafana (`grafana/provisioning/alerting/alerts.yml`)
+
+
+| Alerte                  | Condition                                                      | Sévérité |
+| ----------------------- | -------------------------------------------------------------- | ----------- |
+| Mémoire système > 95% | `system_memory_used / system_memory_total > 95%` pendant 1 min | critical    |
+
+### Évaluation RAG intégrée
+
+```bash
+make eval       # 15 questions → vérification par mots-clés attendus
+make smoke      # 5 questions rapides → alimente Grafana + vérifie l'API
+```
+
+Format `data/eval_set.jsonl` :
+
+```json
+{"id": "q001", "question": "Quel est le prix de CloudSync Pro ?",
+ "expected_keywords": ["29", "mois"], "category": "pricing", "difficulty": "facile"}
+```
+
+Sortie :
+
+```
+[PASS] q001  Quel est le prix de CloudSync Pro ?    2.9s  [RAG 3src]
+[FAIL] q003  Qui est le CEO de TechCorp ?           1.9s  [RAG 3src]
+       → Je n'ai pas cette information.
+       ✗ manquants : Marie Dupont
+
+Résultat : 7/15 PASS (47%)   1 PARTIEL   7 FAIL
+```
+
+### Commandes de référence
+
+```bash
+make dev-bg           # démarre la stack (rebuild si code changé)
+make stop             # arrête tout
+make status           # health check + statut des conteneurs
+make test             # 73 tests, coverage ≥ 70% requis
+make test-security    # bandit : zéro vulnérabilité critique
+make smoke            # 5 questions → vérifie l'API + alimente Grafana
+make eval             # évaluation complète RAG
+make index-rag-docker # indexation des documents dans le conteneur
+make prod             # stack production avec Nginx + TLS
+```
+
+### Problèmes connus documentés
+
+**Bug iptables Docker 28.4 + kernel 6.17+**
+Docker 28.4.0 crée de nouvelles chaînes nft au démarrage mais continue d'utiliser les
+anciennes chaînes `DOCKER-ISOLATION-STAGE-1/2` pour les bridges user-defined.
+Fix documenté dans `docker-compose.yml` (commentaire en-tête) :
+
+```bash
+# Fix temporaire
+sudo iptables -t filter -N DOCKER-ISOLATION-STAGE-1 2>/dev/null || true
+sudo iptables -t filter -N DOCKER-ISOLATION-STAGE-2 2>/dev/null || true
+sudo iptables -t filter -A DOCKER-ISOLATION-STAGE-2 -j RETURN
+# Vérification
+docker network create test-net && echo "OK" && docker network rm test-net
+```
+
+**GPU Docker passthrough**
+Nécessite NVIDIA Container Toolkit (pas dans les dépôts Ubuntu standard).
+Section GPU dans `docker-compose.yml` commentée par défaut avec instructions complètes.
+
+## Étape 14 — Déployé (`etape_14_deployed`)
+
+### Vue d'ensemble
+
+L'étape 14 répond à la question : **"L'application est prête — où et comment on la déploie ?"**
+Elle propose plusieurs stratégies selon le contexte (budget, équipe, infrastructure),
+toutes partageant la même image Docker produite à l'étape 13.
+
+```
+Étape 13 → image Docker → Étape 14 → déploiement(s)
+```
+
+### Quatre stratégies de déploiement
+
+```
+Besoin                          Solution
+────────────────────────────────────────────────────────
+Pipeline CI/CD visuel local   → act + Gitea + ArgoCD + kind  ← nouveau
+Tester K8S sans compte cloud  → Docker Compose VPS
+1 serveur, budget limité       → Docker Compose VPS
+Serverless, scale to zero      → Google Cloud Run
+Déjà sur AWS                   → ECS Fargate
+Forte charge, équipe DevOps    → GKE ou EKS
+```
+
+### Option 0 — Pipeline CI/CD local complet
+
+**Pourquoi c'est la première option :** Avant de déployer sur un vrai cloud, on valide
+le pipeline complet en local. L'architecture est **identique** à la production —
+seules les URLs changent.
+
+```
+git push → Gitea (:3001) → act (CI) → registry local (:5001)
+                                              ↕
+               ArgoCD (dans kind) ← surveille Gitea
+                      ↓
+               kind cluster (:8080) ← pull depuis registry local
+```
+
+**Composants :**
+
+
+| Composant       | Local                        | Équivalent cloud              |
+| --------------- | ---------------------------- | ------------------------------ |
+| Git server      | Gitea (Docker, port 3001)    | GitHub                         |
+| CI runner       | `act` (GitHub Actions local) | GitHub Actions runners         |
+| Registry images | localhost:5001               | GHCR / ECR / Artifact Registry |
+| Kubernetes      | kind (Docker local)          | GKE / EKS / AKS                |
+| GitOps          | ArgoCD (dans kind)           | ArgoCD (dans le cluster cloud) |
+
+**Installation en une commande :**
+
+```bash
+./scripts/setup-local-pipeline.sh setup
+```
+
+**Workflow de développement :**
+
+```bash
+# 1. Modifier le code
+# 2. CI local (lint + tests + docker build)
+./scripts/setup-local-pipeline.sh ci
+
+# 3. Build et push vers le registry local
+./scripts/setup-local-pipeline.sh push-image
+
+# 4. Pousser sur Gitea
+git push local main
+
+# 5. ArgoCD détecte et déploie automatiquement
+# Voir : https://localhost:8081 (port-forward ArgoCD)
+```
+
+### Option 1 — Docker Compose sur VPS
+
+La solution la plus simple pour un vrai déploiement.
+
+```bash
+./scripts/deploy-docker.sh --host user@votre-serveur.com
+```
+
+Le script se connecte en SSH, clone le repo, configure le `.env`, lance
+`docker compose -f docker/docker-compose.prod.yml up -d`.
+
+L'image est tirée depuis GHCR — pas de build sur le serveur.
+
+**Monitoring :** `docker-compose.prod.yml` référence directement les configs de l'étape 13 :
+
+```
+../etape_13_deployable/prometheus.yml              → config Prometheus
+../etape_13_deployable/grafana/provisioning/       → datasource + dashboard automatiques
+```
+
+Aucune configuration supplémentaire — Grafana démarre avec le dashboard préconfiguré.
+
+### Options 2 & 3 — Cloud (GCP / AWS)
+
+Documentées dans `docs/DEPLOY_GCP.md` et `docs/DEPLOY_AWS.md`.
+
+**GCP Cloud Run (serverless recommandé pour démarrer) :**
+
+```bash
+gcloud builds submit --tag europe-west1-docker.pkg.dev/MON_PROJET/chatbot/api
+gcloud run deploy chatbot-api \
+  --image europe-west1-docker.pkg.dev/MON_PROJET/chatbot/api \
+  --set-secrets OPENAI_API_KEY=openai-key:latest \
+  --min-instances 0 --max-instances 10
+```
+
+**AWS ECS Fargate :**
+
+```bash
+aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_URI
+docker push $ECR_URI/chatbot-api:latest
+aws ecs create-service --cli-input-json file://ecs-service.json
+```
+
+### Kubernetes — Manifests détaillés
+
+Structure `k8s/` :
+
+```
+k8s/
+├── namespace.yaml               → namespace "chatbot"
+├── configmap.yaml               → variables non-sensibles
+├── secret.yaml                  → ⚠ placeholders uniquement
+├── pvc.yaml                     → 3 volumes : data, chroma, grafana
+├── chatbot-deployment.yaml      → Deployment + init container RAG
+├── chatbot-service.yaml         → ClusterIP
+├── chatbot-hpa.yaml             → HPA : 2 → 10 replicas (CPU 70% / RAM 80%)
+├── ingress.yaml                 → Nginx Ingress + TLS cert-manager
+├── kustomization.yaml           → orchestration des manifests
+├── monitoring/
+│   ├── prometheus-deployment.yaml          → Prometheus + RBAC + ServiceAccount
+│   ├── grafana-deployment.yaml            → Grafana + volumeMounts subPath
+│   └── grafana-provisioning-configmap.yaml → datasource uid:prometheus + dashboard provider
+└── argocd/
+    └── application.yaml                   → Application ArgoCD (GitOps)
+```
+
+**Points notables :**
+
+`chatbot-deployment.yaml` — init container RAG :
+L'image de l'application s'initialise avec un init container qui peut pré-indexer
+les documents RAG avant que le pod principal démarre.
+
+`chatbot-hpa.yaml` — HPA (Horizontal Pod Autoscaler) :
+
+```yaml
+minReplicas: 2
+maxReplicas: 10
+# Scale up si CPU > 70% ou mémoire > 80%
+# Scale down après 5 min de charge réduite
+```
+
+`grafana-deployment.yaml` — provisioning via subPath :
+
+```yaml
+volumeMounts:
+  - name: provisioning
+    mountPath: /etc/grafana/provisioning/datasources/datasources.yaml
+    subPath: datasources.yaml   # montage d'un seul fichier du ConfigMap
+  - name: provisioning
+    mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+    subPath: dashboards.yaml
+```
+
+`grafana-provisioning-configmap.yaml` — datasource avec uid fixe :
+
+```yaml
+datasources:
+  - name: Prometheus
+    uid: prometheus    # UID FIXE — requis pour que les panels trouvent la datasource
+    url: http://prometheus:9090
+```
+
+### Pipeline CI/CD GitHub Actions
+
+Trois workflows dans `.github/workflows/` :
+
+#### `ci.yml` — Déclenché sur chaque push/PR
+
+```
+lint     → ruff (style + erreurs statiques)
+tests    → pytest (working-directory: etape_13_deployable, coverage ≥ 70%)
+security → bandit (vulnérabilités) + safety (dépendances)
+docker   → build stage test + stage production (validation uniquement, pas de push)
+```
+
+#### `cd.yml` — Déclenché sur merge main ou tag `v*.*.*`
+
+```
+test           → reprend ci.yml (obligatoire)
+build-and-push → GHCR : tags sha-{short} + semver + latest
+                 SBOM généré pour traçabilité
+deploy-staging → SSH + Docker Compose (auto sur merge main)
+deploy-prod    → SSH + Docker Compose (déclenché par tag v*.*.*)
+```
+
+#### `security.yml` — Hebdomadaire
+
+```
+safety → audit des dépendances Python
+trivy  → scan de l'image Docker → résultats dans GitHub Security tab
+```
+
+**Déclencher manuellement :**
+
+```bash
+# Déployer en staging
+gh workflow run cd.yml --field environment=staging
+
+# Créer un tag de release (déclenche le déploiement prod)
+git tag -a v1.2.3 -m "Release v1.2.3"
+git push origin v1.2.3
+```
+
+### Kubernetes local avec kind — Déploiement pas à pas
+
+Pour tester les manifests sans compte cloud :
+
+```bash
+# 1. Créer le cluster (1 control-plane + 2 workers + Nginx Ingress + cert-manager)
+./scripts/local-cloud.sh setup
+
+# 2. Build et chargement de l'image dans kind (évite le pull depuis GHCR)
+docker build --target production -t chatbot-api:local etape_13_deployable/
+kind load docker-image chatbot-api:local --name chatbot-local
+
+# 3. Créer les secrets
+kubectl create namespace chatbot
+kubectl create secret generic chatbot-secrets \
+  --from-literal=openai-api-key="sk-votre-cle" \
+  --from-literal=secret-key="$(openssl rand -hex 32)" \
+  --from-literal=grafana-password="admin123" \
+  -n chatbot
+
+# 4. Déployer
+kubectl apply -k etape_14_deployed/k8s/
+kubectl rollout status deployment/chatbot-api -n chatbot --timeout=3m
+
+# 5. Déployer le monitoring
+kubectl apply -f etape_14_deployed/k8s/monitoring/grafana-provisioning-configmap.yaml
+kubectl apply -f etape_14_deployed/k8s/monitoring/prometheus-deployment.yaml
+kubectl apply -f etape_14_deployed/k8s/monitoring/grafana-deployment.yaml
+
+# Tester
+curl http://localhost:8080/health
+```
+
+### ArgoCD — GitOps visuel
+
+ArgoCD surveille le repo Git et synchronise automatiquement le cluster quand le code change.
+
+```bash
+# Installer ArgoCD dans le cluster
+kubectl create namespace argocd
+kubectl apply -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# Accéder à l'UI
+kubectl port-forward svc/argocd-server -n argocd 8081:443 &
+# → https://localhost:8081
+
+# Appliquer l'Application (surveille Gitea, déploie dans kind)
+kubectl apply -f etape_14_deployed/k8s/argocd/application.yaml
+```
+
+**Ce que l'UI ArgoCD montre :**
+
+- Arbre de toutes les ressources K8S (Deployment, Service, Ingress, PVC, HPA…)
+- Statut de synchronisation : `Synced` / `OutOfSync` / `Degraded`
+- Historique des déploiements avec possibilité de rollback en 1 clic
+- Diff entre l'état Git et l'état du cluster
+
+### Scaling et rollback K8S
+
+```bash
+# Scaling manuel
+kubectl scale deployment chatbot-api --replicas=5 -n chatbot
+
+# Rolling update (zero-downtime)
+kubectl set image deployment/chatbot-api chatbot=chatbot-api:v2 -n chatbot
+kubectl rollout status deployment/chatbot-api -n chatbot
+
+# Rollback
+kubectl rollout undo deployment/chatbot-api -n chatbot
+kubectl rollout undo deployment/chatbot-api --to-revision=2 -n chatbot
+
+# Historique
+kubectl rollout history deployment/chatbot-api -n chatbot
+```
+
+### Synthèse pédagogique étapes 13 & 14
+
+
+| Question                       | Étape 13                                | Étape 14                                 |
+| ------------------------------ | ---------------------------------------- | ----------------------------------------- |
+| **Le code est-il correct ?**   | Tests bloquants au build Docker          | CI GitHub Actions obligatoire avant merge |
+| **Est-il sécurisé ?**        | bandit + safety dans`make test-security` | `security.yml` hebdomadaire + Trivy       |
+| **Comment le surveiller ?**    | Prometheus + Grafana + alertes           | Même stack, déployée dans K8S          |
+| **Comment le livrer ?**        | `make prod` (Docker Compose local)       | GitHub Actions → GHCR → Staging → Prod |
+| **Comment le scaler ?**        | —                                       | HPA K8S (2 → 10 replicas)                |
+| **Comment rollback ?**         | `docker compose up` version précédente | `kubectl rollout undo` / ArgoCD 1 clic    |
+| **Comment simuler tout ça ?** | —                                       | act + Gitea + kind + ArgoCD (100% local)  |
+
+## Arc narratif pour la présentation
+
+```
+00 → "Le LLM ne se souvient de rien — comment construire une mémoire ?"
+03 → "La mémoire a un coût — comment l'optimiser ?"
+05 → "Le LLM ne sait que ce qu'on lui donne — RAG comme mémoire externe"
+07 → "Le chatbot devient un service — comment l'exposer ?"
+08 → "On ne peut pas corriger ce qu'on ne voit pas — métriques"
+09 → "Un service exposé est une cible — sécurité en profondeur"
+10 → "Est-ce que ça tient la charge ? — test de limite"
+11 → "Est-ce qu'on peut livrer en confiance ? — tests automatisés"
+13 → "Toutes les briques ensemble — prêt pour la prod"
+14 → "La prod, c'est quoi concrètement ? — CI/CD + K8S + GitOps"

@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# analysis-template.yaml — Critères de succès d'un déploiement
+# Étape 15 : Argo Rollouts
+#
+# L'AnalysisTemplate définit COMMENT Argo Rollouts décide si un déploiement
+# est un succès ou un échec. Il interroge Prometheus avec des requêtes PromQL.
+#
+# Liens avec les étapes précédentes :
+#   Étape 02 : les métriques conversations_total sont définies dans metrics.py
+#   Étape 14 : les SLOs définissent les seuils (availability ≥ 0.99, etc.)
+#   Étape 15 : on branche ces SLOs sur les décisions de déploiement
+#
+# Un AnalysisRun est créé automatiquement à chaque analyse dans le Rollout.
+# Si une métrique échoue → l'AnalysisRun passe Failed → rollback automatique.
+#
+# Tester manuellement :
+#   kubectl argo rollouts create analysisrun --from-template traiteur-availability \
+#     -n traiteur
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: traiteur-availability
+  namespace: traiteur
+spec:
+  # ── Métriques évaluées ──────────────────────────────────────────────────────
+  # Chaque métrique est interrogée `count` fois toutes les `interval`.
+  # Une métrique est un succès si `successCondition` est vraie.
+  # Une métrique est un échec si `failureCondition` est vraie OU si `failureLimit`
+  # est dépassé (nombre de fois où la condition n'est pas un succès).
+  metrics:
+
+    # ── Disponibilité SLO ─────────────────────────────────────────────────────
+    # SLI : taux de succès des conversations
+    # Succès si ≥ 99% des conversations réussissent
+    # (correspond au SLO défini dans chart/values.yaml)
+    - name: availability
+      interval: 30s    # interroger Prometheus toutes les 30s
+      count: 4         # 4 mesures × 30s = 2 minutes d'analyse
+      successCondition: result[0] >= 0.99
+      failureLimit: 1  # 1 seule mesure sous le seuil → rollback
+      provider:
+        prometheus:
+          address: http://prometheus.traiteur.svc.cluster.local:9090
+          query: |
+            sum(rate(conversations_total{status="success"}[2m]))
+            /
+            sum(rate(conversations_total[2m]))
+
+    # ── Taux d'erreur ─────────────────────────────────────────────────────────
+    # Tolérance zéro au-delà de 5% d'erreurs
+    # Vérification plus stricte que l'availability (détecte les spikes rapides)
+    - name: error-rate
+      interval: 30s
+      count: 4
+      successCondition: result[0] <= 0.05
+      failureLimit: 0  # zero tolérance → 1 seul spike > 5% → rollback immédiat
+      provider:
+        prometheus:
+          address: http://prometheus.traiteur.svc.cluster.local:9090
+          query: |
+            sum(rate(conversations_total{status="error"}[2m]))
+            /
+            sum(rate(conversations_total[2m]))
+
+    # ── Latence P95 ───────────────────────────────────────────────────────────
+    # Avertissement si la latence dépasse 10s (moins strict que le SLO 8s
+    # pour éviter les faux positifs lors du démarrage d'un nouveau pod)
+    - name: latency-p95
+      interval: 30s
+      count: 4
+      successCondition: result[0] <= 10.0
+      failureLimit: 2  # 2 mesures au-dessus → rollback
+      provider:
+        prometheus:
+          address: http://prometheus.traiteur.svc.cluster.local:9090
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(conversation_duration_seconds_bucket[2m])) by (le)
+            )

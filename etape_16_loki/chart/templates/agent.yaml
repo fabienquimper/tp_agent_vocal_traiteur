@@ -1,0 +1,264 @@
+{{/*
+agent.yaml — Deployment + Service + HPA de l'Agent IA
+
+Étape 15 : ajout du conditionnel rollout.enabled
+  Quand rollout.enabled=false (défaut) : ce fichier crée le Deployment
+  Quand rollout.enabled=true           : le Deployment est géré par rollout.yaml
+                                         (Argo Rollouts Rollout resource)
+
+Ce fichier crée toujours : Service NodePort + HPA (si hpa.enabled)
+Le Deployment est conditionnel : {{ if not .Values.rollout.enabled }}
+*/}}
+
+{{- if not .Values.rollout.enabled }}
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+    {{- include "traiteur.selectorLabels" "agent" | nindent 4 }}
+spec:
+  replicas: {{ .Values.agent.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "traiteur.selectorLabels" "agent" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "traiteur.labels" . | nindent 8 }}
+        {{- include "traiteur.selectorLabels" "agent" | nindent 8 }}
+        version: v1
+    spec:
+      serviceAccountName: {{ .Values.agent.serviceAccount.name }}
+      containers:
+        - name: agent
+          image: {{ include "traiteur.image" .Values.agent.image }}
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: traiteur-config
+          env:
+            # ── Variables injectées par Helm (depuis values.yaml) ─────────────
+            # Avantage vs ConfigMap statique : les valeurs changent selon l'env
+            - name: APP_ENV
+              value: {{ .Values.agent.env.appEnv | quote }}
+            - name: RAG_QUALITY_THRESHOLD
+              value: {{ .Values.agent.env.ragQualityThreshold | quote }}
+            - name: ORDER_COMPLEXITY_THRESHOLD
+              value: {{ .Values.agent.env.orderComplexityThreshold | quote }}
+            - name: OLLAMA_BASE_URL
+              value: {{ include "traiteur.ollamaUrl" . | quote }}
+            - name: OTEL_TRACES_ENABLED
+              value: {{ .Values.agent.env.otelTracesEnabled | quote }}
+            {{- if .Values.tracing.jaeger.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "traiteur-agent"
+            {{- end }}
+          volumeMounts:
+            - name: data-vol
+              mountPath: /app/data
+              readOnly: true
+            - name: eval-vol
+              mountPath: /app/eval
+              readOnly: true
+            - name: chroma-vol
+              mountPath: /app/chroma
+            - name: orders-vol
+              mountPath: /app/orders
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.agent.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.agent.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.agent.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.agent.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.agent.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.agent.livenessProbe.failureThreshold }}
+      volumes:
+        - name: data-vol
+          configMap:
+            name: traiteur-data
+        - name: eval-vol
+          configMap:
+            name: traiteur-eval
+        - name: chroma-vol
+          emptyDir: {}
+        - name: orders-vol
+          emptyDir: {}
+{{- end }}{{/* end if not .Values.rollout.enabled */}}
+
+---
+# ── Service ───────────────────────────────────────────────────────────────────
+# Le Service est toujours créé (que ce soit Deployment ou Rollout).
+# Argo Rollouts gère les pods via les ReplicaSets — le Service reste le même.
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    {{- include "traiteur.selectorLabels" "agent" | nindent 4 }}
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30000
+
+---
+# ── HorizontalPodAutoscaler ────────────────────────────────────────────────────
+{{- if .Values.agent.hpa.enabled }}
+{{/*
+Le HPA est conditionnel : {{ if .Values.agent.hpa.enabled }}
+En staging (values.staging.yaml) : hpa.enabled=false → ce bloc est absent du YAML rendu.
+En production (values.yaml) : hpa.enabled=true → le HPA est créé.
+
+C'est l'un des grands avantages de Helm : activer/désactiver des fonctionnalités
+selon l'environnement sans dupliquer les fichiers.
+*/}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agent-hpa
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agent
+  minReplicas: {{ .Values.agent.hpa.minReplicas }}
+  maxReplicas: {{ .Values.agent.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.agent.hpa.cpuUtilization }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 120
+{{- end }}
+
+---
+# ── Agent Canary (optionnel) ───────────────────────────────────────────────────
+{{- if .Values.canary.enabled }}
+{{/*
+Le déploiement canary n'existe QUE si canary.enabled=true.
+Pour activer :
+  helm upgrade traiteur ./chart --set canary.enabled=true --set canary.weight=10
+Pour désactiver (rollback) :
+  helm upgrade traiteur ./chart --set canary.enabled=false
+  → Helm SUPPRIME le Deployment agent-canary (grâce à --prune)
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-canary
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+    app: agent-canary
+    version: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-canary
+  template:
+    metadata:
+      labels:
+        {{- include "traiteur.labels" . | nindent 8 }}
+        app: agent-canary
+        version: canary
+    spec:
+      serviceAccountName: {{ .Values.agent.serviceAccount.name }}
+      containers:
+        - name: agent
+          image: {{ include "traiteur.image" .Values.agent.image }}
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: traiteur-config
+          env:
+            - name: APP_ENV
+              value: {{ .Values.canary.env.appEnv | quote }}
+            - name: CANARY_VERSION
+              value: "v2-candidate"
+            - name: RAG_QUALITY_THRESHOLD
+              value: {{ .Values.agent.env.ragQualityThreshold | quote }}
+            - name: OLLAMA_BASE_URL
+              value: {{ .Values.canary.env.ollama.baseUrl | default (include "traiteur.ollamaUrl" .) | quote }}
+          volumeMounts:
+            - name: data-vol
+              mountPath: /app/data
+              readOnly: true
+            - name: eval-vol
+              mountPath: /app/eval
+              readOnly: true
+            - name: chroma-vol
+              mountPath: /app/chroma
+            - name: orders-vol
+              mountPath: /app/orders
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.agent.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 15
+            failureThreshold: 10
+      volumes:
+        - name: data-vol
+          configMap:
+            name: traiteur-data
+        - name: eval-vol
+          configMap:
+            name: traiteur-eval
+        - name: chroma-vol
+          emptyDir: {}
+        - name: orders-vol
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-canary
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: agent-canary
+  ports:
+    - port: 8000
+      targetPort: 8000
+{{- end }}

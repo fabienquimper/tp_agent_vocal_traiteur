@@ -1,0 +1,22 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Provisioning Grafana — Dashboard provider
+# Étape 02 : Observabilité
+#
+# Indique à Grafana où trouver les fichiers JSON des dashboards.
+# Tous les fichiers .json dans le dossier /dashboards sont automatiquement
+# importés au démarrage de Grafana.
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+providers:
+  - name: "Agent Vocal Traiteur"
+    orgId: 1
+    folder: "Traiteur Dupont"
+    type: file
+    # updateIntervalSeconds : Grafana vérifie les nouveaux dashboards toutes les 30s
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      # foldersFromFilesStructure : sous-dossiers → sous-dossiers dans Grafana
+      foldersFromFilesStructure: false

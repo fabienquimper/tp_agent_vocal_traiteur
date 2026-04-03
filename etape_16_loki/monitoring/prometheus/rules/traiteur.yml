@@ -1,0 +1,175 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# traiteur.yml — Règles d'alerte Prometheus (docker-compose local)
+# Étape 14 : SLOs & Alerting
+#
+# Ce fichier est chargé par Prometheus via la config :
+#   rule_files:
+#     - /etc/prometheus/rules/*.yml
+#
+# Pour K8s : ces règles sont dans le ConfigMap "prometheus-alerts"
+#            (chart/templates/alerting.yaml)
+#
+# Tester les alertes localement :
+#   1. make up → démarre Prometheus + AlertManager
+#   2. make alert-demo → génère des erreurs pour déclencher les alertes
+#   3. http://localhost:9090/rules → liste des règles
+#   4. http://localhost:9090/alerts → alertes actives
+#   5. http://localhost:9093 → UI AlertManager
+# ─────────────────────────────────────────────────────────────────────────────
+
+groups:
+
+  # ── SLOs : les alertes qui comptent ────────────────────────────────────────
+  - name: traiteur.slo
+    rules:
+
+      # ── SLO Disponibilité (99%) ─────────────────────────────────────────────
+      # SLI : taux de succès des conversations
+      # SLO : SLI ≥ 0.99 en permanence
+      #
+      # Pourquoi "for: 5m" ?
+      #   Un seul spike d'erreurs (ex. timeout réseau de 30s) ne doit pas déclencher
+      #   une alerte. On attend 5 minutes de violation CONTINUE.
+      - alert: TraiteurAvailabilitySLOViolation
+        expr: |
+          (
+            sum(rate(conversations_total{status="success"}[5m]))
+            /
+            sum(rate(conversations_total[5m]))
+          ) < 0.99
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+          team: traiteur
+        annotations:
+          summary: "SLO disponibilité violé (< 99%)"
+          description: "Taux de succès actuel : {{ $value | humanizePercentage }}. SLO cible : 99%."
+          runbook: |
+            1. kubectl logs -n traiteur deploy/agent --tail=50
+            2. curl http://localhost:8000/health
+            3. Vérifier Ollama : kubectl logs -n traiteur deploy/ollama
+
+      # ── Error Budget Burn Rate (alerte préventive) ──────────────────────────
+      # Si on brûle l'error budget 14× plus vite que la normale :
+      #   Budget mensuel = 1% × 30j × 24h = 7.2h
+      #   Burn 14× = budget épuisé en 7.2h / 14 = ~30 minutes
+      #
+      # Cette alerte est la plus PRÉCIEUSE :
+      #   Elle prévient AVANT que le SLO soit violé.
+      #   "Vous allez épuiser votre budget dans 30 minutes" → action immédiate.
+      - alert: TraiteurErrorBudgetBurnRateHigh
+        expr: |
+          (
+            sum(rate(conversations_total{status="error"}[1h]))
+            /
+            sum(rate(conversations_total[1h]))
+          ) > 0.01 * 14.4
+        for: 2m
+        labels:
+          severity: critical
+          slo: availability
+          team: traiteur
+        annotations:
+          summary: "Error budget brûlé à 14×, épuisement en < 2h"
+          description: "Taux d'erreur : {{ $value | humanizePercentage }}. Normal : < 0.01%."
+          runbook: "Vérifier les erreurs LLM et RAG immédiatement."
+
+      # ── SLO Latence P95 (< 8s) ─────────────────────────────────────────────
+      # P95 = 95% des conversations finissent en moins de 8 secondes.
+      # Si P95 > 8s : trop de clients attendent trop longtemps.
+      #
+      # Note : histogram_quantile() nécessite les buckets dans conversation_duration_seconds.
+      # Buckets définis dans metrics.py : [1, 2, 3, 5, 8, 13, 21, 34]
+      - alert: TraiteurLatencySLOViolation
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(conversation_duration_seconds_bucket[5m])) by (le)
+          ) > 8.0
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency
+          team: traiteur
+        annotations:
+          summary: "SLO latence violé (P95 > 8s)"
+          description: "P95 actuel : {{ $value | humanizeDuration }}. SLO cible : 8s."
+          runbook: "Vérifier la latence LLM : curl http://localhost:8000/metrics | grep llm_generate_latency"
+
+  # ── Composants : alertes techniques ────────────────────────────────────────
+  - name: traiteur.components
+    rules:
+
+      - alert: TraiteurAgentDown
+        expr: up{job="traiteur-agent"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: agent
+        annotations:
+          summary: "Agent IA indisponible"
+          description: "Prometheus ne peut pas scraper l'agent depuis 1 minute."
+          runbook: "kubectl get pods -n traiteur -l app=agent"
+
+      - alert: TraiteurLLMHighErrorRate
+        expr: |
+          sum(rate(llm_generate_requests_total{status="error"}[5m]))
+          /
+          sum(rate(llm_generate_requests_total[5m]))
+          > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "Taux d'erreur LLM > 5%"
+          description: "Ollama génère des erreurs. Vérifier les ressources (OOM ?)."
+
+      - alert: TraiteurSTTHighErrorRate
+        expr: |
+          sum(rate(stt_requests_total{status="error"}[5m]))
+          /
+          sum(rate(stt_requests_total[5m]))
+          > 0.10
+        for: 3m
+        labels:
+          severity: warning
+          component: stt
+        annotations:
+          summary: "Taux d'erreur STT > 10%"
+          description: "Whisper génère des erreurs. Vérifier les logs STT."
+
+  # ── RAG : qualité des données ───────────────────────────────────────────────
+  - name: traiteur.rag
+    rules:
+
+      - alert: TraiteurRAGHitRateLow
+        expr: |
+          sum(rate(rag_requests_total{result="hit"}[10m]))
+          /
+          sum(rate(rag_requests_total[10m]))
+          < 0.80
+        for: 10m
+        labels:
+          severity: warning
+          component: rag
+        annotations:
+          summary: "Hit rate RAG < 80%"
+          description: |
+            Le RAG ne trouve pas de contexte pour {{ $value | humanizePercentage }} des requêtes.
+            Les réponses de l'agent sont peut-être hors contexte.
+          runbook: "make k8s-rag-rebuild"
+
+      - alert: TraiteurRAGQualityGateFailing
+        expr: |
+          sum(rate(rag_quality_gate_total{result="failed"}[30m]))
+          /
+          sum(rate(rag_quality_gate_total[30m]))
+          > 0.5
+        for: 15m
+        labels:
+          severity: warning
+          component: rag
+        annotations:
+          summary: "Plus de 50% des quality gates RAG échouent"
+          description: "Les données source sont peut-être corrompues."

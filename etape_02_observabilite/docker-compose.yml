@@ -1,0 +1,183 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRAITEUR DUPONT – Agent Vocal IA
+# Étape 02 : Observabilité (Prometheus + Grafana)
+#
+# Nouveautés par rapport à l'étape 01 :
+#   prometheus → collecte les métriques depuis /metrics (port 9090)
+#   grafana    → visualise les métriques (port 3001)
+#
+# Architecture de monitoring :
+#
+#   [agent:8000/metrics] ←── scrape toutes les 15s ──── [prometheus:9090]
+#                                                               ↑
+#                                                        [grafana:3001]
+#                                                         dashboard auto-provisionné
+#
+# Modèle "pull" de Prometheus :
+#   Prometheus TIRE les métriques depuis chaque service.
+#   Avantage : Prometheus détecte immédiatement si un service tombe
+#   (le scrape échoue → alerte possible).
+#   Alternative "push" (StatsD, InfluxDB) : le service envoie les métriques.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── LLM Local ───────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: traiteur_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  # ── Speech-to-Text (Whisper) ─────────────────────────────────────────────────
+  stt:
+    build:
+      context: ./services/stt
+      dockerfile: Dockerfile
+      args:
+        WHISPER_MODEL: ${WHISPER_MODEL:-base}
+    container_name: traiteur_stt
+    ports:
+      - "8001:8001"
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+      start_period: 120s
+    restart: unless-stopped
+
+  # ── Text-to-Speech (Piper TTS) ───────────────────────────────────────────────
+  tts:
+    build:
+      context: ./services/tts
+      dockerfile: Dockerfile
+    container_name: traiteur_tts
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ── Agent IA (LangGraph + RAG + Commandes + Métriques) ──────────────────────
+  agent:
+    build:
+      context: ./services/agent
+      dockerfile: Dockerfile
+    container_name: traiteur_agent
+    ports:
+      - "8000:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+      stt:
+        condition: service_healthy
+      tts:
+        condition: service_healthy
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - STT_SERVICE_URL=http://stt:8001
+      - TTS_SERVICE_URL=http://tts:8002
+      - LLM_MODEL=${LLM_MODEL:-mistral}
+      - ORDER_COMPLEXITY_THRESHOLD=${ORDER_COMPLEXITY_THRESHOLD:-6}
+      - DATA_DIR=/app/data
+      - ORDERS_DIR=/app/orders
+      - CHROMA_DIR=/app/chroma
+    volumes:
+      - ./data:/app/data:ro
+      - ./orders:/app/orders
+      - chroma_data:/app/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+  # ── Interface Web ────────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: traiteur_ui
+    ports:
+      - "3000:80"
+    depends_on:
+      agent:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Prometheus (collecte des métriques) ──────────────────────────────────────
+  # Prometheus scrape /metrics sur l'agent toutes les 15 secondes.
+  # Les données sont stockées dans un volume dédié (format TSDB = Time Series DB).
+  # Rétention : 7 jours (configurable via --storage.tsdb.retention.time)
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: traiteur_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      # Permet de recharger la config sans redémarrer : curl -X POST localhost:9090/-/reload
+      - "--web.enable-lifecycle"
+    depends_on:
+      agent:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Grafana (visualisation) ──────────────────────────────────────────────────
+  # Grafana se connecte à Prometheus pour afficher les métriques en dashboards.
+  # Le dashboard "Agent Vocal Traiteur" est auto-provisionné au démarrage
+  # (via monitoring/grafana/provisioning/) — aucune action manuelle requise.
+  #
+  # Accès : http://localhost:3001 (admin / admin par défaut, ou $GRAFANA_PASSWORD)
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: traiteur_grafana
+    ports:
+      - "3001:3000"   # 3000 est pris par l'UI
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # Mode anonyme (lecture seule sans login) — pratique pour le TP
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      # Désactive le télémétrie Grafana
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  chroma_data:
+  prometheus_data:    # Données TSDB Prometheus (séries temporelles)
+  grafana_data:       # Configuration et dashboards Grafana persistants

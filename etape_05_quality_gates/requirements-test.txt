@@ -1,0 +1,6 @@
+# Dépendances pour les tests automatisés — étape 05
+# Installation : pip install -r requirements-test.txt
+# Usage        : make test  (ou python3 -m pytest tests/ -v)
+
+pytest>=8.0
+httpx>=0.27          # client HTTP synchrone pour les tests d'intégration

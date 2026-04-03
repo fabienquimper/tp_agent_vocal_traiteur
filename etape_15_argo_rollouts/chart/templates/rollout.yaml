@@ -1,0 +1,221 @@
+{{/*
+rollout.yaml — Argo Rollouts : Rollout + AnalysisTemplate
+Étape 15 : Progressive Delivery automatisé
+
+Conditionnel : {{ if .Values.rollout.enabled }}
+Quand rollout.enabled=true :
+  1. Ce fichier crée le Rollout (remplace le Deployment de agent.yaml)
+  2. agent.yaml ne crée PAS le Deployment (conditionnel opposé)
+  3. Le Service "agent" et le HPA restent inchangés
+
+Activer :
+  helm upgrade traiteur ./chart --set rollout.enabled=true
+  → Argo Rollouts prend le contrôle des déploiements
+
+Désactiver :
+  helm upgrade traiteur ./chart --set rollout.enabled=false
+  → Retour au Deployment standard (rolling update)
+
+Déclencher un nouveau déploiement progressif :
+  kubectl argo rollouts set image rollout/agent agent=traiteur-agent:v2 -n traiteur
+  kubectl argo rollouts get rollout agent -n traiteur --watch
+
+Prérequis :
+  Le contrôleur Argo Rollouts doit être installé dans le cluster.
+  scripts/rollout-install.sh installe le contrôleur.
+*/}}
+
+{{- if .Values.rollout.enabled }}
+# ── AnalysisTemplate — critères de succès ─────────────────────────────────────
+{{/*
+L'AnalysisTemplate est référencée dans les étapes du Rollout.
+Chaque analyse crée un AnalysisRun qui interroge Prometheus.
+
+Flux :
+  Rollout.step: analysis → crée AnalysisRun → résultat: Successful ou Failed
+  Failed → Rollout passe en Degraded → rollback automatique vers la version stable
+*/}}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: traiteur-availability
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  metrics:
+    # ── Disponibilité ─────────────────────────────────────────────────────────
+    # Si < {{ .Values.rollout.analysis.availabilityThreshold }} → rollback
+    - name: availability
+      interval: {{ .Values.rollout.analysis.interval }}
+      count: {{ .Values.rollout.analysis.count }}
+      successCondition: result[0] >= {{ .Values.rollout.analysis.availabilityThreshold }}
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusUrl }}
+          query: |
+            sum(rate(conversations_total{status="success"}[2m]))
+            /
+            sum(rate(conversations_total[2m]))
+
+    # ── Taux d'erreur ─────────────────────────────────────────────────────────
+    # Si > {{ .Values.rollout.analysis.errorRateThreshold }} → rollback
+    - name: error-rate
+      interval: {{ .Values.rollout.analysis.interval }}
+      count: {{ .Values.rollout.analysis.count }}
+      successCondition: result[0] <= {{ .Values.rollout.analysis.errorRateThreshold }}
+      failureLimit: 0
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusUrl }}
+          query: |
+            sum(rate(conversations_total{status="error"}[2m]))
+            /
+            sum(rate(conversations_total[2m]))
+
+    # ── Latence P95 ───────────────────────────────────────────────────────────
+    - name: latency-p95
+      interval: {{ .Values.rollout.analysis.interval }}
+      count: {{ .Values.rollout.analysis.count }}
+      successCondition: result[0] <= {{ .Values.slos.latency.p95TargetSeconds }}
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusUrl }}
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(conversation_duration_seconds_bucket[2m])) by (le)
+            )
+
+---
+# ── Rollout — remplace le Deployment agent ────────────────────────────────────
+{{/*
+Le Rollout est presque identique au Deployment de agent.yaml.
+La seule différence est spec.strategy.canary au lieu de spec.strategy.rollingUpdate.
+
+Comparer avec agent.yaml (étape 13) :
+  Avant : kind: Deployment
+          spec.strategy.type: RollingUpdate
+  Après : kind: Rollout
+          spec.strategy.canary.steps: [...]
+
+L'avantage : le Rollout hérite de toutes les valeurs de .Values.agent.*
+sans dupliquer la spec du pod template.
+*/}}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: agent
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+    {{- include "traiteur.selectorLabels" "agent" | nindent 4 }}
+  annotations:
+    # Mémoriser la stratégie pour argocd/gitops
+    rollout.argoproj.io/revision: "1"
+spec:
+  replicas: {{ .Values.agent.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "traiteur.selectorLabels" "agent" | nindent 6 }}
+
+  strategy:
+    canary:
+      steps:
+        # ── Phase 1 : 20% ───────────────────────────────────────────────────
+        - setWeight: 20
+        - pause: {duration: {{ .Values.rollout.pauseDuration }}}
+        - analysis:
+            templates:
+              - templateName: traiteur-availability
+
+        # ── Phase 2 : 50% ───────────────────────────────────────────────────
+        - setWeight: 50
+        - pause: {duration: {{ .Values.rollout.pauseDuration }}}
+        - analysis:
+            templates:
+              - templateName: traiteur-availability
+
+        # ── Phase 3 : 80% ───────────────────────────────────────────────────
+        - setWeight: 80
+        - pause: {duration: {{ .Values.rollout.pauseDuration }}}
+        - analysis:
+            templates:
+              - templateName: traiteur-availability
+
+        # Après toutes les étapes : promotion automatique à 100%
+
+  # ── Pod template : identique à agent.yaml ────────────────────────────────────
+  template:
+    metadata:
+      labels:
+        {{- include "traiteur.labels" . | nindent 8 }}
+        {{- include "traiteur.selectorLabels" "agent" | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.agent.serviceAccount.name }}
+      containers:
+        - name: agent
+          image: {{ include "traiteur.image" .Values.agent.image }}
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: traiteur-config
+          env:
+            - name: APP_ENV
+              value: {{ .Values.agent.env.appEnv | quote }}
+            - name: RAG_QUALITY_THRESHOLD
+              value: {{ .Values.agent.env.ragQualityThreshold | quote }}
+            - name: ORDER_COMPLEXITY_THRESHOLD
+              value: {{ .Values.agent.env.orderComplexityThreshold | quote }}
+            - name: OLLAMA_BASE_URL
+              value: {{ include "traiteur.ollamaUrl" . | quote }}
+            - name: OTEL_TRACES_ENABLED
+              value: {{ .Values.agent.env.otelTracesEnabled | quote }}
+            {{- if .Values.tracing.jaeger.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "traiteur-agent"
+            {{- end }}
+          volumeMounts:
+            - name: data-vol
+              mountPath: /app/data
+              readOnly: true
+            - name: eval-vol
+              mountPath: /app/eval
+              readOnly: true
+            - name: chroma-vol
+              mountPath: /app/chroma
+            - name: orders-vol
+              mountPath: /app/orders
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.agent.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.agent.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.agent.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.agent.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.agent.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.agent.livenessProbe.failureThreshold }}
+      volumes:
+        - name: data-vol
+          configMap:
+            name: traiteur-data
+        - name: eval-vol
+          configMap:
+            name: traiteur-eval
+        - name: chroma-vol
+          emptyDir: {}
+        - name: orders-vol
+          emptyDir: {}
+{{- end }}

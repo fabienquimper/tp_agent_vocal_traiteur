@@ -1,0 +1,100 @@
+{{/*
+ollama.yaml — LLM local Ollama
+Conditionnel : {{ if .Values.ollama.enabled }}
+En CI : ollama.enabled=false → aucune ressource Ollama créée (le mock est dans k8s/ci/)
+*/}}
+
+{{- if .Values.ollama.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.ollama.storage }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+    {{- include "traiteur.selectorLabels" "ollama" | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "traiteur.selectorLabels" "ollama" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "traiteur.labels" . | nindent 8 }}
+        {{- include "traiteur.selectorLabels" "ollama" | nindent 8 }}
+    spec:
+      containers:
+        - name: ollama
+          image: {{ include "traiteur.image" .Values.ollama.image }}
+          imagePullPolicy: {{ .Values.ollama.image.pullPolicy }}
+          ports:
+            - containerPort: 11434
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+          resources:
+            {{- toYaml .Values.ollama.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["ollama", "list"]
+            initialDelaySeconds: {{ .Values.ollama.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 15
+            failureThreshold: 20
+          livenessProbe:
+            exec:
+              command: ["ollama", "list"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "traiteur.selectorLabels" "ollama" | nindent 4 }}
+  ports:
+    - port: 11434
+      targetPort: 11434
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-external
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    {{- include "traiteur.selectorLabels" "ollama" | nindent 4 }}
+  ports:
+    - port: 11434
+      targetPort: 11434
+      nodePort: 30434
+{{- end }}

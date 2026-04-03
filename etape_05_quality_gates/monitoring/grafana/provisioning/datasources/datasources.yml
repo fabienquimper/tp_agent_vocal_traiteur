@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Provisioning Grafana — Datasource Prometheus
+# Étape 02 : Observabilité
+#
+# Ce fichier configure automatiquement la datasource Prometheus dans Grafana
+# au démarrage du conteneur. Sans ce fichier, il faudrait créer la datasource
+# manuellement dans l'interface Grafana à chaque redémarrage.
+#
+# IMPORTANT : l'uid "prometheus" est FIXE.
+# Si Grafana génère un uid aléatoire, tous les panels du dashboard perdent
+# leur source et affichent "No data". L'uid fixe garantit que les dashboards
+# JSON fonctionnent immédiatement sans modification.
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    # UID FIXE — référencé dans vocal_agent.json pour que les panels trouvent la source
+    uid: prometheus
+    url: http://prometheus:9090
+    access: proxy
+    isDefault: true
+    editable: false
+    jsonData:
+      # Prometheus 2.x supporte le query browser avancé
+      prometheusType: Prometheus
+      # Cache les labels pendant 5 minutes (performance)
+      cacheLevel: High

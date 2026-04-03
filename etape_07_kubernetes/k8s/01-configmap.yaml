@@ -1,0 +1,37 @@
+# ConfigMap — variables d'environnement partagées par tous les pods
+#
+# Équivalent de la section "environment:" dans docker-compose.yml.
+# Toutes les valeurs sont injectées dans les conteneurs via envFrom: configMapRef.
+#
+# IMPORTANT : les valeurs utilisent les noms de service K8s (pas localhost).
+# En K8s, les services se trouvent via DNS :
+#   <service-name>.<namespace>.svc.cluster.local
+# Exemple : ollama.traiteur.svc.cluster.local:11434
+# Raccourci (dans le même namespace) : ollama:11434
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traiteur-config
+  namespace: traiteur
+data:
+  # ── Services (noms de service K8s, pas localhost) ──────────────────────────
+  OLLAMA_BASE_URL: "http://ollama:11434"
+  STT_SERVICE_URL: "http://stt-router:8001"
+  TTS_SERVICE_URL: "http://tts:8002"
+
+  # ── LLM ───────────────────────────────────────────────────────────────────
+  LLM_MODEL: "mistral"
+  LLM_TEMPERATURE: "0.1"
+  ORDER_COMPLEXITY_THRESHOLD: "6"
+
+  # ── Chemins (montés via volumes dans chaque pod) ───────────────────────────
+  DATA_DIR: "/app/data"
+  ORDERS_DIR: "/app/orders"
+  CHROMA_DIR: "/app/chroma"
+  EVAL_DIR: "/app/eval"
+
+  # ── Quality Gate ──────────────────────────────────────────────────────────
+  RAG_QUALITY_THRESHOLD: "0.8"
+
+  # ── Environnement ─────────────────────────────────────────────────────────
+  APP_ENV: "production"

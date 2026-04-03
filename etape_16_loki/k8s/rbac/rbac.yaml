@@ -1,0 +1,152 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# rbac.yaml — RBAC : ServiceAccounts, Roles, RoleBindings
+# Étape 12 : Sécurité
+#
+# RBAC = Role-Based Access Control
+# Contrôle QUI peut faire QUOI sur quelles ressources K8s.
+#
+# Hiérarchie RBAC :
+#
+#   ServiceAccount   ← identité d'un pod
+#       │
+#       ├── RoleBinding ──▶ Role (permissions dans un namespace)
+#       └── ClusterRoleBinding ──▶ ClusterRole (permissions globales)
+#
+# Principe du moindre privilège :
+#   Chaque pod ne doit avoir que les permissions STRICTEMENT nécessaires.
+#   Un pod agent n'a pas besoin de lire les Secrets ou de créer des Deployments.
+#
+# Problème du ServiceAccount "default" :
+#   Sans RBAC configuré, les pods utilisent le SA "default".
+#   Dans certaines configurations, ce SA a des droits trop larges.
+#   Solution : créer des SA dédiés avec des permissions minimales.
+#
+# Ce fichier crée :
+#   SA agent-sa     → peut lire les ConfigMaps (données RAG)
+#   SA prometheus-sa → peut lire pods/endpoints (service discovery)
+#   SA monitoring-sa → lecture seule sur les ressources monitoring
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ServiceAccounts — identités des pods
+# ══════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-sa
+  namespace: traiteur
+  annotations:
+    # Documentation des permissions — indispensable pour l'audit
+    rbac.traiteur/purpose: "Agent IA — accès lecture ConfigMaps uniquement"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-sa
+  namespace: traiteur
+  annotations:
+    rbac.traiteur/purpose: "Prometheus — service discovery K8s (lecture pods/endpoints)"
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# Roles — permissions dans le namespace "traiteur"
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Rôle Agent : lecture des ConfigMaps uniquement
+# L'agent a besoin de lire traiteur-data et traiteur-eval (montés via ConfigMap).
+# Il n'a PAS besoin de créer, modifier ou supprimer quoi que ce soit.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-role
+  namespace: traiteur
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]     # ← lecture seule, jamais "create/update/delete"
+  # Note : PAS de accès aux Secrets, Pods, Deployments, etc.
+
+---
+# Rôle Prometheus : service discovery
+# Prometheus a besoin de lister les pods et endpoints pour auto-découvrir les cibles.
+# Ne peut PAS modifier les ressources.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-role
+  namespace: traiteur
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "endpoints", "services"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# RoleBindings — associe un Role à un ServiceAccount
+# ══════════════════════════════════════════════════════════════════════════════
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-rolebinding
+  namespace: traiteur
+subjects:
+  - kind: ServiceAccount
+    name: agent-sa         # ← le SA qui reçoit les permissions
+    namespace: traiteur
+roleRef:
+  kind: Role
+  name: agent-role         # ← les permissions accordées
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-rolebinding
+  namespace: traiteur
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: traiteur
+roleRef:
+  kind: Role
+  name: prometheus-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# ClusterRole pour Prometheus (accès cross-namespace)
+# Prometheus scrape des pods dans d'autres namespaces (kube-system, etc.)
+# Un ClusterRole est requis pour ça (un Role est limité à un namespace).
+# ══════════════════════════════════════════════════════════════════════════════
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-cluster-role
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions", "networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-cluster-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: traiteur
+roleRef:
+  kind: ClusterRole
+  name: prometheus-cluster-role
+  apiGroup: rbac.authorization.k8s.io

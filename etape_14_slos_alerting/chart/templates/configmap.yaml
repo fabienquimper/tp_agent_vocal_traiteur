@@ -1,0 +1,47 @@
+{{/*
+configmap.yaml — Variables d'environnement partagées + données RAG
+
+Comparer avec k8s/01-configmap.yaml (YAML brut étape 07) :
+  Avant : OLLAMA_BASE_URL: "http://ollama:11434"  (hardcodé)
+  Après : {{ include "traiteur.ollamaUrl" . }}    (peut pointer vers mock en CI)
+
+  Avant : APP_ENV: "production"                   (hardcodé)
+  Après : {{ .Values.agent.env.appEnv }}           (staging / ci / production)
+
+  Avant : RAG_QUALITY_THRESHOLD: "0.8"            (hardcodé)
+  Après : {{ .Values.agent.env.ragQualityThreshold }} (0.7 en staging, 0.8 en prod)
+
+Point fort Helm : une seule source de vérité pour les variables d'env.
+Quand agent.yaml fait `envFrom: configMapRef: traiteur-config`, il récupère
+ces valeurs automatiquement — sans les dupliquer.
+*/}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traiteur-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+data:
+  # ── Services (noms de service K8s, pas localhost) ──────────────────────────
+  OLLAMA_BASE_URL: {{ include "traiteur.ollamaUrl" . | quote }}
+  STT_SERVICE_URL: "http://stt-router:8001"
+  TTS_SERVICE_URL: "http://tts:8002"
+
+  # ── LLM ───────────────────────────────────────────────────────────────────
+  LLM_MODEL: {{ .Values.agent.env.llmModel | default "mistral" | quote }}
+  LLM_TEMPERATURE: "0.1"
+  ORDER_COMPLEXITY_THRESHOLD: {{ .Values.agent.env.orderComplexityThreshold | quote }}
+
+  # ── Chemins (montés via volumes dans chaque pod) ───────────────────────────
+  DATA_DIR: "/app/data"
+  ORDERS_DIR: "/app/orders"
+  CHROMA_DIR: "/app/chroma"
+  EVAL_DIR: "/app/eval"
+
+  # ── Quality Gate ──────────────────────────────────────────────────────────
+  RAG_QUALITY_THRESHOLD: {{ .Values.agent.env.ragQualityThreshold | quote }}
+
+  # ── Environnement ─────────────────────────────────────────────────────────
+  APP_ENV: {{ .Values.agent.env.appEnv | quote }}
