@@ -225,11 +225,11 @@ def synthesize_speech(state: AgentState) -> dict:
     Ignoré si skip_tts=True.
     """
     if state.get("skip_tts"):
-        return {}
+        return {"audio_response": None}
 
     response_text = state.get("response_text", "")
     if not response_text:
-        return {}
+        return {"audio_response": None}
 
     try:
         with httpx.Client(timeout=60) as client:
@@ -244,7 +244,7 @@ def synthesize_speech(state: AgentState) -> dict:
 
     except Exception as exc:
         logger.error(f"Erreur TTS : {exc}")
-        return {}  # Pas critique : la réponse texte reste disponible
+        return {"audio_response": None}
 
 
 # ═════════════════════════════════════════════════════════════════════════════

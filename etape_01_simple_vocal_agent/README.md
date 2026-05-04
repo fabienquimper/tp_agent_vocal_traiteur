@@ -78,6 +78,42 @@ Le seuil est configurable via `ORDER_COMPLEXITY_THRESHOLD` dans `.env`.
 
 ### Résolution des problèmes connus (Ubuntu 24.04 Noble + Docker 28.x)
 
+#### R��seau inter-containers bloqué avec `runtime: nvidia` (Ubuntu + UFW)
+
+**Symptôme** : nginx (UI) et l'agent ne peuvent pas joindre les autres services via le nom Docker (`ollama:11434`, `agent:8000`). Erreur `[Errno 110] Connection timed out` dans les logs.
+
+**Cause** : `runtime: nvidia` sur le container Ollama, combiné à UFW actif sur Ubuntu, bloque le forwarding iptables entre containers sur le même bridge Docker.
+
+**Fixes appliqués dans ce projet** :
+1. Autoriser le sous-réseau Docker dans UFW :
+   ```bash
+   sudo ufw allow from 172.20.0.0/16
+   sudo ufw allow to 172.20.0.0/16
+   ```
+2. Utiliser `host.docker.internal` au lieu des noms de service Docker dans les configs proxy, avec `extra_hosts: ["host.docker.internal:host-gateway"]` dans `docker-compose.yml` pour les services `agent` et `ui`.
+
+---
+
+#### HuggingFace Hub bloque le démarrage (réseau hors-ligne ou lent)
+
+**Symptôme** : les containers `stt` et `agent` restent en `health: starting` pendant 5+ minutes. Logs : `Max retries exceeded... Failed to establish a new connection`.
+
+**Cause** : `huggingface_hub` tente de contacter `huggingface.co` au démarrage pour vérifier si une nouvelle version du modèle est disponible, même si le modèle est déjà en cache local.
+
+**Fix** : `HF_HUB_OFFLINE=1` dans l'environnement des services `stt` et `agent` (déjà présent dans ce `docker-compose.yml`).
+
+---
+
+#### STT charge le mauvais device (`cuda` sur image sans CUDA)
+
+**Symptôme** : `docker logs traiteur_stt` affiche `Chargement du modèle Whisper 'xxx' sur cuda...` puis le container reste bloqué.
+
+**Cause** : `.env` contenait `WHISPER_DEVICE=cuda` mais l'image `python:3.11-slim` n'a pas les libs CUDA.
+
+**Fix** : `.env` → `WHISPER_DEVICE=cpu`. Le service STT reste en CPU dans ce TP.
+
+---
+
 #### Bug iptables : `Chain 'DOCKER-ISOLATION-STAGE-2' does not exist`
 
 Docker 28.x sur Ubuntu 24.04 avec kernel 6.x utilise `iptables-nft` en interne et oublie de créer la chaîne `DOCKER-ISOLATION-STAGE-2` au démarrage. Symptôme :

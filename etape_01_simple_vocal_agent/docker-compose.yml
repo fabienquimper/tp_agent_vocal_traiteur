@@ -43,12 +43,13 @@ services:
     environment:
       - WHISPER_MODEL=${WHISPER_MODEL:-base}
       - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      - HF_HUB_OFFLINE=1
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
       interval: 20s
       timeout: 10s
       retries: 8
-      start_period: 120s
+      start_period: 300s # 120s
     restart: unless-stopped
 
   # ── Text-to-Speech (Piper TTS) ───────────────────────────────────────────────
@@ -83,14 +84,17 @@ services:
       tts:
         condition: service_healthy
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - STT_SERVICE_URL=http://stt:8001
-      - TTS_SERVICE_URL=http://tts:8002
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - STT_SERVICE_URL=http://host.docker.internal:8001
+      - TTS_SERVICE_URL=http://host.docker.internal:8002
       - LLM_MODEL=${LLM_MODEL:-mistral}
       - ORDER_COMPLEXITY_THRESHOLD=${ORDER_COMPLEXITY_THRESHOLD:-6}
       - DATA_DIR=/app/data
       - ORDERS_DIR=/app/orders
       - CHROMA_DIR=/app/chroma
+      - HF_HUB_OFFLINE=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data:ro          # Fichiers de l'entreprise (lecture seule)
       - ./orders:/app/orders          # Fichiers Excel générés
@@ -111,6 +115,8 @@ services:
     container_name: traiteur_ui
     ports:
       - "3000:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       agent:
         condition: service_healthy

@@ -65,11 +65,15 @@ logs-agent:
 
 ## ─── Initialisation ──────────────────────────────────────────────────────────
 
-## init-ollama : Télécharge le modèle LLM Mistral dans Ollama
+## init-ollama : Télécharge le modèle LLM Mistral dans Ollama (skip si déjà présent)
 init-ollama:
-	@echo "Téléchargement du modèle Mistral (peut prendre plusieurs minutes)..."
-	@docker exec traiteur_ollama ollama pull mistral
-	@echo "✓ Modèle Mistral prêt"
+	@if docker exec traiteur_ollama ollama list 2>/dev/null | grep -q "mistral"; then \
+		echo "✓ Modèle Mistral déjà présent, skip"; \
+	else \
+		echo "Téléchargement du modèle Mistral (peut prendre plusieurs minutes)..."; \
+		docker exec traiteur_ollama ollama pull mistral; \
+		echo "✓ Modèle Mistral prêt"; \
+	fi
 
 ## init-all : Build + up + init-ollama (démarrage complet depuis zéro)
 init-all: build up
