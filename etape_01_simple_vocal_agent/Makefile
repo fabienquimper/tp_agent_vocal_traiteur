@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Makefile – Traiteur Dupont – Agent Vocal IA
 # ─────────────────────────────────────────────────────────────────────────────
-.PHONY: help build up down logs init-ollama reload-docs test clean dev
+.PHONY: help build up down logs init-ollama reload-docs test clean dev up-hf build-hf up-groq build-groq
 
 AGENT_URL = http://localhost:8000
 
@@ -15,7 +15,8 @@ else
   GPU_MSG   = mode CPU
 endif
 
-COMPOSE = docker compose $(GPU_FLAGS)
+COMPOSE    = docker compose $(GPU_FLAGS)
+COMPOSE_HF = docker compose -f docker-compose.yml -f docker-compose.hf.yml
 
 ## help : Affiche cette aide
 help:
@@ -131,6 +132,63 @@ clean:
 clean-orders:
 	rm -f orders/*.xlsx
 	@echo "✓ Fichiers de commandes supprimés"
+
+## ─── Mode HuggingFace (APIs distantes) ──────────────────────────────────────
+
+## build-hf : Construit les images pour le mode HuggingFace
+build-hf:
+	$(COMPOSE_HF) build stt tts agent ui
+
+## up-hf : Démarre les services en mode HuggingFace (sans Ollama local)
+## Usage : make up-hf HF_API_TOKEN=hf_xxxxxxxxxxxx  (ou via .env)
+up-hf:
+	$(eval _HF_TOKEN := $(or $(HF_API_TOKEN),$(HF_HUB_TOKEN),$(shell grep -E '^HF_(API_TOKEN|HUB_TOKEN)=' .env 2>/dev/null | head -1 | cut -d= -f2-)))
+	@if [ -z "$(_HF_TOKEN)" ]; then \
+		echo "ERREUR : token HuggingFace introuvable."; \
+		echo "  Option 1 : make up-hf HF_API_TOKEN=hf_xxxxxxxxxxxx"; \
+		echo "  Option 2 : ajouter HF_API_TOKEN=hf_xxx dans votre fichier .env"; \
+		echo "Token gratuit : https://huggingface.co/settings/tokens"; \
+		exit 1; \
+	fi
+	@echo "Mode HuggingFace (APIs distantes)"
+	HF_API_TOKEN=$(_HF_TOKEN) HF_HUB_TOKEN=$(_HF_TOKEN) $(COMPOSE_HF) up -d stt tts agent ui
+	@echo ""
+	@echo "Services demarres (sans Ollama local) :"
+	@echo "  UI    → http://localhost:3000"
+	@echo "  Agent → http://localhost:8000"
+	@echo "  STT   → http://localhost:8001  (whisper-large-v3 via HF)"
+	@echo "  TTS   → http://localhost:8002  (facebook/mms-tts-fra via HF)"
+	@echo ""
+	@echo "Note : premier appel peut prendre ~30 s (chargement modele HF)"
+
+## ─── Mode Groq (LLM + STT gratuits via API Groq) ────────────────────────────
+COMPOSE_GROQ = docker compose -f docker-compose.yml -f docker-compose.groq.yml
+
+## build-groq : Construit les images pour le mode Groq
+build-groq:
+	$(COMPOSE_GROQ) build stt agent
+
+## up-groq : Démarre les services en mode Groq (sans Ollama local)
+## Usage : make up-groq GROQ_API_KEY=gsk_xxxxxxxxxxxx  (ou via .env)
+up-groq:
+	$(eval _GROQ_KEY := $(or $(GROQ_API_KEY),$(shell grep -E '^GROQ_API_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2-)))
+	@if [ -z "$(_GROQ_KEY)" ]; then \
+		echo "ERREUR : token Groq introuvable."; \
+		echo "  Option 1 : make up-groq GROQ_API_KEY=gsk_xxxxxxxxxxxx"; \
+		echo "  Option 2 : ajouter GROQ_API_KEY=gsk_xxx dans votre fichier .env"; \
+		echo "Token gratuit : https://console.groq.com/keys"; \
+		exit 1; \
+	fi
+	@echo "Mode Groq (LLM llama-3.1-8b + STT whisper-large-v3-turbo)"
+	GROQ_API_KEY=$(_GROQ_KEY) $(COMPOSE_GROQ) up -d stt tts agent ui
+	@echo ""
+	@echo "Services demarres (sans Ollama local) :"
+	@echo "  UI    → http://localhost:3000"
+	@echo "  Agent → http://localhost:8000"
+	@echo "  STT   → http://localhost:8001  (whisper-large-v3-turbo via Groq)"
+	@echo "  TTS   → http://localhost:8002  (piper local)"
+	@echo ""
+	@echo "Note : Groq est tres rapide (~1-3 s). Audio et texte passes par Groq."
 
 ## ─── Développement ───────────────────────────────────────────────────────────
 

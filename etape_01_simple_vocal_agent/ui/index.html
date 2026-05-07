@@ -63,6 +63,31 @@
 
   </div>
 
+  <!-- ── Bouton Debug (bas-droite) ──────────────────────────────────────── -->
+  <button id="debugFab" class="debug-fab" title="Diagnostics techniques">🔧</button>
+
+  <!-- ── Panel Debug ─────────────────────────────────────────────────────── -->
+  <div id="debugOverlay" class="debug-overlay" hidden>
+    <div class="debug-panel" role="dialog" aria-label="Diagnostics techniques">
+
+      <div class="debug-header">
+        <span>🔧 Diagnostics techniques</span>
+        <span id="debugOverallBadge" class="debug-overall-badge"></span>
+        <button id="debugClose" class="debug-close" title="Fermer">✕</button>
+      </div>
+
+      <div class="debug-content" id="debugContent">
+        <p class="debug-loading">⏳ Chargement…</p>
+      </div>
+
+      <div class="debug-footer">
+        <button id="debugRefreshBtn" class="debug-action-btn">↻ Rafraîchir</button>
+        <button id="debugTestBtn"    class="debug-action-btn debug-action-btn--accent">⚡ Test complet</button>
+      </div>
+
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

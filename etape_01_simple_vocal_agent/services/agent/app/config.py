@@ -5,6 +5,7 @@ Toutes les valeurs configurables passent par des variables d'environnement
 (avec valeurs par défaut pour le développement local).
 """
 
+from pydantic import Field, AliasChoices
 from pydantic_settings import BaseSettings
 
 
@@ -15,8 +16,24 @@ class Settings(BaseSettings):
     tts_service_url: str = "http://tts:8002"
 
     # ── Modèle LLM ─────────────────────────────────────────────────────────────
-    llm_model: str = "mistral"
-    llm_temperature: float = 0.1  # Faible pour des réponses déterministes
+    llm_provider: str = "local"        # "local" (Ollama) | "huggingface" | "groq"
+    llm_model: str = "mistral"         # Utilisé uniquement si llm_provider=local
+    llm_temperature: float = 0.1       # Faible pour des réponses déterministes
+
+    # ── HuggingFace (si llm_provider="huggingface") ────────────────────────────
+    # Accepte HF_API_TOKEN, HF_HUB_TOKEN ou HF_TOKEN indifféremment
+    hf_api_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("hf_api_token", "HF_API_TOKEN", "HF_HUB_TOKEN", "HF_TOKEN"),
+    )
+    hf_llm_model: str = "Qwen/Qwen2.5-7B-Instruct"
+
+    # ── Groq (si llm_provider="groq") ──────────────────────────────────────────
+    groq_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("groq_api_key", "GROQ_API_KEY"),
+    )
+    groq_llm_model: str = "llama-3.1-8b-instant"
 
     # ── Logique métier ─────────────────────────────────────────────────────────
     # Au-delà de ce seuil (total d'unités), la commande est "complexe"

@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 
 # Dépendances Python
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 120 --retries 5 -r requirements.txt
 
 # Pré-téléchargement du modèle Whisper (évite le téléchargement au 1er appel)
 # Le modèle est choisi via l'ARG WHISPER_MODEL (défaut : base)

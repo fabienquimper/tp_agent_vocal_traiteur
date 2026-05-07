@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Override Groq – à combiner avec docker-compose.yml
+#
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.groq.yml \
+#     up -d stt tts agent ui
+#
+# ou plus simplement :
+#   make up-groq GROQ_API_KEY=gsk_xxxxxxxxxxxx
+#
+# Ce fichier remplace Whisper local + Ollama par des appels Groq :
+#   - STT  : whisper-large-v3-turbo via Groq (très rapide, gratuit)
+#   - LLM  : llama-3.1-8b-instant via Groq  (très rapide, gratuit)
+#   - TTS  : piper local (inchangé, < 1 s, pas de quota)
+#
+# ⚠ Vie privée : l'audio et le texte sont envoyés aux serveurs Groq.
+#   Pour un usage 100 % local, utilisez le mode par défaut (make up).
+#
+# Prérequis :
+#   - Un token Groq gratuit : https://console.groq.com/keys
+#   - Variable : GROQ_API_KEY (obligatoire)
+#   - Variables optionnelles : GROQ_LLM_MODEL, GROQ_STT_MODEL
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Speech-to-Text : whisper-large-v3-turbo via Groq ────────────────────────
+  stt:
+    environment:
+      - STT_PROVIDER=groq
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_STT_MODEL=${GROQ_STT_MODEL:-whisper-large-v3-turbo}
+
+  # ── Text-to-Speech : piper local (rapide, < 1s, aucun quota) ────────────────
+  tts: {}
+
+  # ── Agent LLM : llama-3.1-8b-instant via Groq ────────────────────────────────
+  agent:
+    environment:
+      - LLM_PROVIDER=groq
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_LLM_MODEL=${GROQ_LLM_MODEL:-llama-3.1-8b-instant}
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false   # Ollama non démarré en mode Groq → dépendance ignorée
+      stt:
+        condition: service_healthy
+      tts:
+        condition: service_healthy

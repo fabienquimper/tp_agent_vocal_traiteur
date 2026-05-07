@@ -326,6 +326,77 @@ etape_01_simple_vocal_agent/
 
 ---
 
+## Mode HuggingFace (APIs distantes)
+
+Si les traitements IA sont trop lents sur votre machine (pas de GPU, CPU modeste), vous pouvez remplacer les trois modèles locaux par des appels à l'**API HuggingFace Inference** — gratuite pour un usage modéré.
+
+| Service     | Modèle local              | Modèle HuggingFace (défaut)                  |
+|-------------|--------------------------|----------------------------------------------|
+| STT (voix)  | Whisper base (~145 MB)   | `openai/whisper-large-v3` (plus précis)      |
+| TTS (parole)| piper siwis-medium       | `hexgrad/Kokoro-82M`                         |
+| LLM (agent) | Mistral 7B via Ollama    | `Qwen/Qwen2.5-7B-Instruct` (multilingue)    |
+
+### 1. Obtenir un token HuggingFace (gratuit)
+
+1. Créer un compte sur [huggingface.co](https://huggingface.co)
+2. Aller dans **Settings → Access Tokens**
+3. Créer un token avec le rôle **Read** (ou *Inference*)
+4. Copier le token (`hf_xxxxxxxxxxxx`)
+
+### 2. Démarrer en mode HuggingFace
+
+```bash
+# Option A – via Makefile (recommandé)
+make up-hf HF_API_TOKEN=hf_xxxxxxxxxxxx
+
+# Option B – via docker compose directement
+HF_API_TOKEN=hf_xxxxxxxxxxxx \
+  docker compose -f docker-compose.yml -f docker-compose.hf.yml \
+  up -d stt tts agent ui
+```
+
+> **Remarque** : Ollama n'est pas démarré — inutile en mode HF.
+> Le premier appel peut prendre ~20–30 s le temps que HuggingFace charge le modèle en mémoire.
+
+### 3. Changer de modèle (optionnel)
+
+Les modèles HF sont configurables via variables d'environnement :
+
+```bash
+HF_API_TOKEN=hf_xxx \
+HF_LLM_MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1 \
+HF_STT_MODEL=openai/whisper-large-v3 \
+HF_TTS_MODEL=facebook/mms-tts-fra \
+  make up-hf
+```
+
+Ou dans votre `.env` :
+```
+HF_API_TOKEN=hf_xxxxxxxxxxxx
+HF_LLM_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+HF_STT_MODEL=openai/whisper-large-v3
+HF_TTS_MODEL=facebook/mms-tts-fra
+```
+
+### 4. Revenir en mode local
+
+```bash
+make down
+make up   # redémarre avec Ollama local
+```
+
+### Comparaison des modes
+
+| Critère               | Mode local                  | Mode HuggingFace            |
+|-----------------------|-----------------------------|-----------------------------|
+| Confidentialité       | 100 % (aucune donnée sortante) | Audio/texte envoyés à HF  |
+| Vitesse (sans GPU)    | Lent (30–120 s/requête LLM) | Rapide (~2–5 s)             |
+| Coût                  | Gratuit                     | Gratuit (quota API HF)      |
+| Disponibilité         | Toujours (hors-ligne OK)    | Nécessite Internet          |
+| Qualité STT           | Whisper base (correct)      | Whisper large-v3 (excellent)|
+
+---
+
 ## Prochaines étapes suggérées
 
 - **Étape 02** : Ajout des tests (pytest, coverage ≥ 70 %, LLM mocké)

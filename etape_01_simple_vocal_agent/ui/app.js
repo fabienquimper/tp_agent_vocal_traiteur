@@ -478,8 +478,228 @@ function base64ToAudio(base64) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+  // Détection du format depuis les magic bytes (WAV=RIFF, FLAC=fLaC, OGG=OggS, MP3=ID3/0xFF)
+  let mime = 'audio/wav';
+  if (bytes[0] === 0x66 && bytes[1] === 0x4C && bytes[2] === 0x61 && bytes[3] === 0x43) mime = 'audio/flac';
+  else if (bytes[0] === 0x4F && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) mime = 'audio/ogg';
+  else if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) mime = 'audio/mpeg';
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
   return new Audio(url);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Debug Panel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const debugFab     = document.getElementById('debugFab');
+const debugOverlay = document.getElementById('debugOverlay');
+const debugContent = document.getElementById('debugContent');
+const debugBadge   = document.getElementById('debugOverallBadge');
+
+debugFab.addEventListener('click', () => debugOpen());
+document.getElementById('debugClose').addEventListener('click', () => debugClose());
+document.getElementById('debugRefreshBtn').addEventListener('click', () => debugRefresh());
+document.getElementById('debugTestBtn').addEventListener('click', () => debugFullTest());
+
+// Fermer en cliquant sur le fond
+debugOverlay.addEventListener('click', e => { if (e.target === debugOverlay) debugClose(); });
+// Retirer aussi l'attribut hidden initial (héritage HTML, remplacé par la classe .open)
+debugOverlay.removeAttribute('hidden');
+// Fermer avec Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && debugOverlay.classList.contains('open')) debugClose(); });
+
+function debugOpen() {
+  debugOverlay.classList.add('open');
+  debugOverlay.removeAttribute('aria-hidden');
+  debugRefresh();
+}
+
+function debugClose() {
+  debugOverlay.classList.remove('open');
+  debugOverlay.setAttribute('aria-hidden', 'true');
+}
+
+// ── Refresh (checks rapides) ──────────────────────────────────────────────────
+async function debugRefresh() {
+  debugContent.innerHTML = '<p class="debug-loading">⏳ Interrogation des services…</p>';
+  debugBadge.className = 'debug-overall-badge dbg-spin';
+  debugBadge.textContent = '…';
+
+  try {
+    const res = await fetch('/api/debug');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderDebug(data);
+  } catch (err) {
+    debugContent.innerHTML = `<div class="debug-section"><p style="color:#C62828;font-size:.85rem">
+      Impossible de joindre l'agent : ${err.message}</p></div>`;
+    debugBadge.className = 'debug-overall-badge dbg-err';
+    debugBadge.textContent = 'erreur';
+  }
+}
+
+// ── Test complet (appels réels LLM + TTS) ────────────────────────────────────
+async function debugFullTest() {
+  const btn = document.getElementById('debugTestBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Test en cours…';
+
+  // Conserver la section debug existante et ajouter le bloc test
+  let testSection = document.getElementById('debugTestSection');
+  if (!testSection) {
+    testSection = document.createElement('div');
+    testSection.id = 'debugTestSection';
+    testSection.className = 'debug-section';
+    debugContent.appendChild(testSection);
+  }
+  testSection.innerHTML = '<div class="debug-section-title">⚡ Test pipeline réel</div>' +
+    '<p class="debug-loading" style="padding:8px 0">Appel LLM + TTS en cours (peut prendre 10–30 s)…</p>';
+
+  try {
+    const res = await fetch('/api/debug/test');
+    const data = await res.json();
+    renderTestResults(testSection, data.tests || {});
+  } catch (err) {
+    testSection.innerHTML += `<p style="color:#C62828;font-size:.82rem">Erreur : ${err.message}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Test complet';
+    testSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+// ── Rendus ────────────────────────────────────────────────────────────────────
+
+const SERVICE_META = {
+  ollama:    { icon: '🧠', label: 'LLM (Ollama local)' },
+  stt:       { icon: '🎙', label: 'STT – Transcription' },
+  tts:       { icon: '🔊', label: 'TTS – Synthèse vocale' },
+  rag:       { icon: '📚', label: 'RAG – Base vectorielle' },
+  hf_token:  { icon: '🔑', label: 'HuggingFace Token' },
+};
+
+function renderDebug(data) {
+  const overall = data.overall || 'ok';
+  const cls = { ok: 'dbg-ok', degraded: 'dbg-warn', error: 'dbg-err' }[overall] || 'dbg-spin';
+  const lbl = { ok: '✓ OK', degraded: '⚠ Dégradé', error: '✗ Erreur' }[overall] || '…';
+  debugBadge.className = `debug-overall-badge ${cls}`;
+  debugBadge.textContent = lbl;
+
+  let html = '';
+
+  // Config active
+  html += `<div class="debug-section">
+    <div class="debug-section-title">Configuration active</div>
+    ${cfgRow('LLM provider', data.config?.llm_provider || '?')}
+    ${cfgRow('LLM model',    data.config?.llm_model    || '?')}
+    ${cfgRow('STT service',  data.config?.stt_url      || '?')}
+    ${cfgRow('TTS service',  data.config?.tts_url      || '?')}
+    <div style="font-size:.72rem;color:#aaa;margin-top:6px;text-align:right">
+      Diagnostics effectués en ${data.elapsed_ms ?? '?'} ms
+    </div>
+  </div>`;
+
+  // Services
+  html += `<div class="debug-section"><div class="debug-section-title">Services</div>`;
+  for (const [key, info] of Object.entries(data.checks || {})) {
+    html += renderServiceRow(key, info);
+  }
+  html += `</div>`;
+
+  // Suggestions
+  const sugs = data.suggestions || [];
+  if (sugs.length > 0) {
+    html += `<div class="debug-section"><div class="debug-section-title">💡 Solutions de repli</div>`;
+    for (const s of sugs) html += renderSuggestion(s);
+    html += `</div>`;
+  }
+
+  debugContent.innerHTML = html;
+
+  // Réinsérer section test si elle existait
+  const prev = document.getElementById('debugTestSection');
+  if (!prev) {
+    const ts = document.createElement('div');
+    ts.id = 'debugTestSection';
+    debugContent.appendChild(ts);
+  }
+}
+
+function cfgRow(key, val) {
+  return `<div class="debug-config-row">
+    <span class="debug-config-key">${key}</span>
+    <span class="debug-config-val" title="${val}">${val}</span>
+  </div>`;
+}
+
+function renderServiceRow(key, info) {
+  const meta  = SERVICE_META[key] || { icon: '⚙', label: key };
+  const st    = info.status || 'error';
+  const dotCls = { ok: 'dot-ok', warn: 'dot-warn', error: 'dot-error',
+                   skipped: 'dot-skipped', degraded: 'dot-warn' }[st] || 'dot-error';
+  const bdgCls = { ok: 'badge-ok', warn: 'badge-warn', error: 'badge-error',
+                   skipped: 'badge-skipped', degraded: 'badge-warn' }[st] || 'badge-error';
+  const bdgLbl = { ok: 'OK', warn: 'Dégradé', error: 'Erreur',
+                   skipped: 'Inactif', degraded: 'Dégradé' }[st] || st;
+
+  let detail = '';
+  if (info.provider)   detail += `<span>provider: <b>${info.provider}</b></span>  `;
+  if (info.model)      detail += `<span>modèle: <b>${info.model}</b></span>  `;
+  if (info.voice)      detail += `<span>voix: <b>${info.voice}</b></span>  `;
+  if (info.latency_ms !== undefined) detail += `<span>${info.latency_ms} ms</span>  `;
+  if (info.chunks !== undefined)     detail += `<span>${info.chunks} chunks</span>  `;
+  if (info.models_loaded?.length)    detail += `<span>modèles: ${info.models_loaded.join(', ')}</span>  `;
+  if (info.llm_model)  detail += `<span>modèle LLM: <b>${info.llm_model}</b></span>  `;
+  if (info.note)       detail += `<span style="color:#888">${info.note}</span>`;
+  if (info.error)      detail += `<span class="debug-service-error">⚠ ${escHtml(info.error)}</span>`;
+
+  return `<div class="debug-service-row">
+    <div class="debug-dot ${dotCls}"></div>
+    <div style="flex:1;min-width:0">
+      <div class="debug-service-name">${meta.icon} ${meta.label}</div>
+      ${detail ? `<div class="debug-service-meta">${detail}</div>` : ''}
+    </div>
+    <span class="debug-badge ${bdgCls}">${bdgLbl}</span>
+  </div>`;
+}
+
+function renderSuggestion(s) {
+  const cls = { error: 'sug-error', warning: 'sug-warning', info: 'sug-info' }[s.severity] || 'sug-info';
+  const icon = { error: '🔴', warning: '🟡', info: '🔵' }[s.severity] || '💡';
+  let html = `<div class="debug-suggestion ${cls}">
+    <strong>${icon} ${escHtml(s.service)} — ${escHtml(s.message)}</strong>`;
+  if (s.fix) html += `<div class="debug-fix">${escHtml(s.fix)}</div>`;
+  if (s.alt) html += `<div class="debug-alt">Alternative : ${escHtml(s.alt)}</div>`;
+  html += `</div>`;
+  return html;
+}
+
+function renderTestResults(container, tests) {
+  let html = '<div class="debug-section-title">⚡ Test pipeline réel</div>';
+  for (const [key, res] of Object.entries(tests)) {
+    const st = res.status || 'error';
+    const dotCls = st === 'ok' ? 'dot-ok' : st === 'warn' ? 'dot-warn' : 'dot-error';
+    const bdgCls = st === 'ok' ? 'badge-ok' : st === 'warn' ? 'badge-warn' : 'badge-error';
+    const label = key === 'llm' ? '🧠 LLM' : key === 'tts' ? '🔊 TTS' : key;
+    let detail = '';
+    if (res.sample) detail = `« ${escHtml(res.sample)} »`;
+    if (res.bytes)  detail = `${res.bytes} bytes audio`;
+    if (res.error)  detail = `<span class="debug-service-error">${escHtml(res.error)}</span>`;
+
+    html += `<div class="debug-test-row">
+      <div class="debug-dot ${dotCls}" style="margin-top:1px"></div>
+      <span class="debug-service-name">${label}</span>
+      ${detail ? `<span style="flex:1;font-size:.8rem;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${detail}</span>` : '<span style="flex:1"></span>'}
+      <span class="debug-latency">${res.latency_ms ?? '?'} ms</span>
+      <span class="debug-badge ${bdgCls}" style="margin-left:6px">${st}</span>
+    </div>`;
+    if (res.hint) html += `<div class="debug-hint">💡 ${escHtml(res.hint)}</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 // ── Labels d'intention ────────────────────────────────────────────────────────

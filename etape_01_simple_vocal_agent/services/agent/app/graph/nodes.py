@@ -13,7 +13,6 @@ import json
 import logging
 
 import httpx
-from langchain_ollama import ChatOllama
 from langchain.schema import HumanMessage, SystemMessage
 
 from ..config import settings
@@ -22,12 +21,71 @@ from .state import AgentState
 
 logger = logging.getLogger(__name__)
 
+
 # ── LLM partagé (instancié une seule fois) ────────────────────────────────────
-llm = ChatOllama(
-    model=settings.llm_model,
-    base_url=settings.ollama_base_url,
-    temperature=settings.llm_temperature,
-)
+
+class _Resp:
+    """Réponse minimaliste compatible avec l'interface LangChain (.content)."""
+    content: str = ""
+
+
+def _build_llm():
+    """Crée le LLM selon LLM_PROVIDER : Ollama local, HuggingFace ou Groq."""
+
+    if settings.llm_provider == "huggingface":
+        from huggingface_hub import InferenceClient
+        client = InferenceClient(model=settings.hf_llm_model, token=settings.hf_api_token or None)
+        temperature = settings.llm_temperature
+
+        class _HFChatLLM:
+            def invoke(self, messages):
+                hf_msgs = [
+                    {"role": "system" if isinstance(m, SystemMessage) else "user", "content": m.content}
+                    for m in messages if isinstance(m, (SystemMessage, HumanMessage))
+                ]
+                response = client.chat_completion(messages=hf_msgs, max_tokens=512, temperature=temperature)
+                r = _Resp()
+                r.content = response.choices[0].message.content
+                return r
+
+        logger.info(f"[LLM] Provider HuggingFace – modèle : {settings.hf_llm_model}")
+        return _HFChatLLM()
+
+    if settings.llm_provider == "groq":
+        from groq import Groq
+        client = Groq(api_key=settings.groq_api_key or None)
+        temperature = settings.llm_temperature
+
+        class _GroqChatLLM:
+            def invoke(self, messages):
+                groq_msgs = [
+                    {"role": "system" if isinstance(m, SystemMessage) else "user", "content": m.content}
+                    for m in messages if isinstance(m, (SystemMessage, HumanMessage))
+                ]
+                response = client.chat.completions.create(
+                    model=settings.groq_llm_model,
+                    messages=groq_msgs,
+                    max_tokens=512,
+                    temperature=temperature,
+                )
+                r = _Resp()
+                r.content = response.choices[0].message.content
+                return r
+
+        logger.info(f"[LLM] Provider Groq – modèle : {settings.groq_llm_model}")
+        return _GroqChatLLM()
+
+    # Provider local via Ollama (défaut)
+    from langchain_ollama import ChatOllama
+    logger.info(f"[LLM] Provider local (Ollama) – modèle : {settings.llm_model}")
+    return ChatOllama(
+        model=settings.llm_model,
+        base_url=settings.ollama_base_url,
+        temperature=settings.llm_temperature,
+    )
+
+
+llm = _build_llm()
 
 
 # ═════════════════════════════════════════════════════════════════════════════

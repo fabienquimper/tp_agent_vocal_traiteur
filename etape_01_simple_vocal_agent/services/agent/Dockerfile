@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 
 # Installation des dépendances Python (ordre optimisé pour le cache Docker)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 120 --retries 5 -r requirements.txt
 
 # Pré-téléchargement du modèle d'embeddings multilingue (~90 MB)
 # Ce modèle gère très bien le français et évite de dépendre d'Ollama pour les embeddings

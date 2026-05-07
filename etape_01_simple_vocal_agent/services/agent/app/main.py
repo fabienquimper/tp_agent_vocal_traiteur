@@ -27,6 +27,7 @@ import json
 import logging
 import random
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -393,18 +394,78 @@ def _is_ollama_unavailable(exc: Exception) -> bool:
     return False
 
 
-def _friendly_error_response(transcript: str, exc: Exception) -> AgentResponse:
+def _classify_error(exc: Exception) -> tuple[str, str]:
+    """Retourne (message_utilisateur, detail_technique)."""
+    from .config import settings as cfg
+    err = f"{type(exc).__name__}: {exc}"
+    err_lower = err.lower()
+    provider = cfg.llm_provider
+
     if _is_ollama_unavailable(exc):
-        message = (
-            "Je suis désolé, le service de traitement IA (Ollama/Mistral) est actuellement "
-            "indisponible. Vérifiez que tous les services sont démarrés (`make up`) et que "
-            "le modèle Mistral est téléchargé (`make init-ollama`)."
+        return (
+            "Le service IA local (Ollama) est inaccessible.",
+            "Vérifiez que les conteneurs sont démarrés : make up — puis make init-ollama pour télécharger le modèle.",
         )
-    else:
-        message = (
-            "Je suis désolé, une erreur technique s'est produite. "
-            "Veuillez réessayer dans quelques instants ou contacter directement notre boutique."
+
+    if "402" in err or "payment required" in err_lower:
+        if provider == "groq":
+            return (
+                "Le quota Groq est temporairement épuisé.",
+                "Attendez quelques minutes (quota par minute) ou vérifiez console.groq.com.",
+            )
+        return (
+            "Le quota mensuel de l'API HuggingFace est épuisé.",
+            "Essayez Groq (gratuit, illimité) : make up-groq GROQ_API_KEY=gsk_xxx — token sur console.groq.com/keys.",
         )
+
+    if "401" in err or "403" in err or "unauthorized" in err_lower or "forbidden" in err_lower:
+        if provider == "groq":
+            return (
+                "Le token Groq est invalide ou expiré.",
+                "Vérifiez GROQ_API_KEY dans votre fichier .env — token gratuit sur console.groq.com/keys.",
+            )
+        return (
+            "Le token HuggingFace est invalide ou expiré.",
+            "Vérifiez HF_API_TOKEN dans votre fichier .env — token gratuit sur huggingface.co/settings/tokens.",
+        )
+
+    if "404" in err or "not found" in err_lower:
+        if provider == "groq":
+            return (
+                "Le modèle Groq est introuvable.",
+                "Vérifiez GROQ_LLM_MODEL dans .env. Modèles disponibles : llama-3.1-8b-instant, llama-3.3-70b-versatile.",
+            )
+        return (
+            "Le modèle IA est introuvable sur HuggingFace.",
+            "Vérifiez HF_LLM_MODEL dans .env. Modèle recommandé : Qwen/Qwen2.5-7B-Instruct.",
+        )
+
+    if "timeout" in err_lower or "timed out" in err_lower:
+        return (
+            "L'IA met trop de temps à répondre (timeout).",
+            "Réessayez dans quelques secondes. Si Groq : généralement < 2s, vérifiez le modèle choisi.",
+        )
+
+    if "connection" in err_lower or "network" in err_lower:
+        return (
+            "Connexion réseau impossible vers le service IA.",
+            "Vérifiez votre connexion Internet et l'état des services via le panel 🔧.",
+        )
+
+    return (
+        "Une erreur technique s'est produite.",
+        f"Détail : {err[:200]} — Consultez le panel 🔧 pour diagnostiquer.",
+    )
+
+
+def _friendly_error_response(transcript: str, exc: Exception) -> AgentResponse:
+    user_msg, tech_detail = _classify_error(exc)
+    message = (
+        f"Je suis désolé, je ne peux pas répondre en ce moment.\n"
+        f"{user_msg}\n\n"
+        f"ℹ️ {tech_detail}"
+    )
+    logger.error(f"Erreur agent : {exc}", exc_info=True)
     return AgentResponse(
         transcript=transcript, intent="", order_items=[],
         response_text=message, is_error=True,
@@ -702,6 +763,207 @@ async def get_status():
 
     overall = "ok" if all(v["status"] == "ok" for v in results.values()) else "degraded"
     return {"status": overall, "services": results}
+
+
+@app.get("/api/debug")
+async def debug_status():
+    """
+    Diagnostic rapide (< 2 s) : ping tous les services, retourne config + suggestions.
+    Ne fait PAS d'appel LLM réel — utilisez /api/debug/test pour ça.
+    """
+    from .config import settings as cfg
+
+    checks: dict[str, Any] = {}
+    suggestions: list[dict] = []
+    t0 = time.perf_counter()
+
+    async def _ping(url: str, timeout: float = 3.0) -> tuple[dict, int]:
+        t = time.perf_counter()
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            return r.json(), int((time.perf_counter() - t) * 1000)
+
+    # ── Ollama (mode local uniquement) ────────────────────────────────────────
+    if cfg.llm_provider == "local":
+        try:
+            data, ms = await _ping(f"{cfg.ollama_base_url}/api/tags")
+            models = [m["name"] for m in data.get("models", [])]
+            has_model = any(cfg.llm_model in m for m in models)
+            checks["ollama"] = {
+                "status": "ok" if has_model else "warn",
+                "provider": "local", "model": cfg.llm_model,
+                "latency_ms": ms, "models_loaded": models,
+            }
+            if not has_model:
+                suggestions.append({
+                    "severity": "error", "service": "LLM / Ollama",
+                    "message": f"Modèle '{cfg.llm_model}' absent d'Ollama.",
+                    "fix": f"make init-ollama",
+                    "alt": f"Passer en mode HuggingFace :\nmake up-hf HF_API_TOKEN=hf_xxx",
+                })
+        except Exception as exc:
+            checks["ollama"] = {"status": "error", "provider": "local",
+                                 "model": cfg.llm_model, "error": str(exc)[:200]}
+            suggestions.append({
+                "severity": "error", "service": "LLM / Ollama",
+                "message": "Ollama inaccessible.",
+                "fix": "make up",
+                "alt": "Mode sans GPU :\nmake up-hf HF_API_TOKEN=hf_xxx",
+            })
+    else:
+        checks["ollama"] = {
+            "status": "skipped",
+            "note": f"LLM_PROVIDER=huggingface → Ollama non utilisé",
+        }
+
+    # ── STT ───────────────────────────────────────────────────────────────────
+    try:
+        data, ms = await _ping(f"{cfg.stt_service_url}/health")
+        checks["stt"] = {"status": "ok", "latency_ms": ms, **data}
+    except Exception as exc:
+        checks["stt"] = {"status": "error", "error": str(exc)[:200]}
+        suggestions.append({
+            "severity": "error", "service": "STT",
+            "message": "Service STT inaccessible.",
+            "fix": "docker compose up -d stt",
+        })
+
+    # ── TTS ───────────────────────────────────────────────────────────────────
+    try:
+        data, ms = await _ping(f"{cfg.tts_service_url}/health")
+        checks["tts"] = {"status": "ok", "latency_ms": ms, **data}
+    except Exception as exc:
+        checks["tts"] = {"status": "error", "error": str(exc)[:200]}
+        suggestions.append({
+            "severity": "error", "service": "TTS",
+            "message": "Service TTS inaccessible.",
+            "fix": "docker compose up -d tts",
+        })
+
+    # ── RAG / ChromaDB ────────────────────────────────────────────────────────
+    try:
+        count = get_retriever().vectorstore._collection.count()
+        checks["rag"] = {"status": "ok" if count > 0 else "warn", "chunks": count}
+        if count == 0:
+            suggestions.append({
+                "severity": "warning", "service": "RAG",
+                "message": "Base vectorielle vide — les questions sur les menus/horaires ne fonctionneront pas.",
+                "fix": "make reload-docs",
+            })
+    except Exception as exc:
+        checks["rag"] = {"status": "error", "error": str(exc)[:200]}
+
+    # ── HuggingFace token (mode HF) ───────────────────────────────────────────
+    if cfg.llm_provider == "huggingface":
+        token_ok = bool(cfg.hf_api_token)
+        checks["hf_token"] = {
+            "status": "ok" if token_ok else "error",
+            "token_set": token_ok,
+            "llm_model": cfg.hf_llm_model,
+        }
+        if not token_ok:
+            suggestions.append({
+                "severity": "error", "service": "HuggingFace",
+                "message": "HF_API_TOKEN absent — les appels LLM/STT via HF échoueront.",
+                "fix": "Ajoutez HF_API_TOKEN=hf_xxx dans .env\nToken gratuit : https://huggingface.co/settings/tokens",
+                "alt": "Passez sur Groq (gratuit, sans quota mensuel) :\nmake up-groq GROQ_API_KEY=gsk_xxx",
+            })
+
+    # ── Groq token (mode Groq) ────────────────────────────────────────────────
+    if cfg.llm_provider == "groq":
+        token_ok = bool(cfg.groq_api_key)
+        checks["groq_token"] = {
+            "status": "ok" if token_ok else "error",
+            "token_set": token_ok,
+            "llm_model": cfg.groq_llm_model,
+        }
+        if not token_ok:
+            suggestions.append({
+                "severity": "error", "service": "Groq",
+                "message": "GROQ_API_KEY absent — les appels LLM/STT via Groq échoueront.",
+                "fix": "Ajoutez GROQ_API_KEY=gsk_xxx dans .env\nToken gratuit : https://console.groq.com/keys",
+            })
+
+    statuses = [v.get("status") for v in checks.values()]
+    overall = "error" if "error" in statuses else ("degraded" if "warn" in statuses else "ok")
+
+    return {
+        "overall": overall,
+        "checks": checks,
+        "suggestions": suggestions,
+        "config": {
+            "llm_provider": cfg.llm_provider,
+            "llm_model": (
+                cfg.hf_llm_model if cfg.llm_provider == "huggingface"
+                else cfg.groq_llm_model if cfg.llm_provider == "groq"
+                else cfg.llm_model
+            ),
+            "stt_url": cfg.stt_service_url,
+            "tts_url": cfg.tts_service_url,
+        },
+        "elapsed_ms": int((time.perf_counter() - t0) * 1000),
+    }
+
+
+@app.get("/api/debug/test")
+async def debug_full_test():
+    """
+    Pipeline complet avec appels réels (LLM + TTS). Peut prendre 5–30 s.
+    Utilisé par le bouton 'Test complet' du panel de debug UI.
+    """
+    results: dict[str, Any] = {}
+
+    # ── Test LLM ──────────────────────────────────────────────────────────────
+    t = time.perf_counter()
+    try:
+        from .graph.nodes import llm
+        resp = await asyncio.to_thread(
+            llm.invoke,
+            [SystemMessage(content="Réponds uniquement par le mot 'OK'."),
+             HumanMessage(content="Test de connexion.")],
+        )
+        results["llm"] = {
+            "status": "ok",
+            "latency_ms": int((time.perf_counter() - t) * 1000),
+            "sample": resp.content.strip()[:80],
+        }
+    except Exception as exc:
+        err = str(exc)
+        hint = None
+        if "402" in err:
+            hint = "Quota mensuel HuggingFace épuisé. Attendez le 1er du mois ou changez HF_LLM_MODEL dans .env."
+        elif "404" in err:
+            hint = "Modèle introuvable sur le provider HF. Essayez : HF_LLM_MODEL=Qwen/Qwen2.5-7B-Instruct"
+        elif "401" in err or "403" in err:
+            hint = "Token HF invalide ou expiré. Vérifiez HF_API_TOKEN dans .env."
+        results["llm"] = {
+            "status": "error",
+            "latency_ms": int((time.perf_counter() - t) * 1000),
+            "error": err[:300],
+            "hint": hint,
+        }
+
+    # ── Test TTS ──────────────────────────────────────────────────────────────
+    t = time.perf_counter()
+    try:
+        audio = await _call_tts("Test audio.", skip_tts=False)
+        results["tts"] = {
+            "status": "ok" if audio else "warn",
+            "latency_ms": int((time.perf_counter() - t) * 1000),
+            "bytes": len(audio) if audio else 0,
+        }
+    except Exception as exc:
+        err = str(exc)
+        hint = "402" in err and "Quota TTS épuisé — le TTS piper local est recommandé (TTS_PROVIDER=local)."
+        results["tts"] = {
+            "status": "error",
+            "latency_ms": int((time.perf_counter() - t) * 1000),
+            "error": err[:200],
+            "hint": hint or None,
+        }
+
+    return {"tests": results}
 
 
 @app.post("/api/reload-documents")
