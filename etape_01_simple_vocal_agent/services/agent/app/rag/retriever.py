@@ -13,6 +13,7 @@ lors des démarrages suivants (évite de ré-indexer à chaque redémarrage).
 """
 
 import logging
+import shutil
 from pathlib import Path
 
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
@@ -63,6 +64,16 @@ def initialize_vectorstore(force_reload: bool = False) -> Chroma:
         _retriever = None  # Force la recréation du retriever
         return _vectorstore
 
+    # ── Vidage de l'ancienne collection pour éviter les doublons ─────────────
+    if Path(chroma_path).exists():
+        try:
+            old = Chroma(persist_directory=chroma_path, embedding_function=embeddings)
+            old.delete_collection()
+            logger.info("Collection ChromaDB vidée")
+        except Exception as exc:
+            logger.warning(f"Impossible de vider la collection ({exc}) — suppression du dossier")
+            shutil.rmtree(chroma_path, ignore_errors=True)
+
     # ── Indexation depuis les fichiers sources ────────────────────────────────
     logger.info(f"Indexation des documents depuis {data_path}...")
 
@@ -91,6 +102,17 @@ def initialize_vectorstore(force_reload: bool = False) -> Chroma:
     )
     logger.info("Vectorstore créé et persisté sur disque")
     _retriever = None  # Force la recréation du retriever
+
+    # ── Génération du catalogue des prix depuis menus.txt ─────────────────────
+    # Import différé pour éviter les imports circulaires au chargement des modules
+    try:
+        from ..orders.catalog_generator import generate_catalog_from_menu
+        from ..orders.catalog import reload_catalog
+        generate_catalog_from_menu()
+        reload_catalog()
+    except Exception as exc:
+        logger.warning(f"Génération catalog.json échouée (non bloquant) : {exc}")
+
     return _vectorstore
 
 

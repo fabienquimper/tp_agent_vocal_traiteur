@@ -974,7 +974,23 @@ async def reload_documents():
         retriever_module._vectorstore = None
         initialize_vectorstore(force_reload=True)
         count = get_retriever().vectorstore._collection.count()
-        return {"status": "ok", "message": f"Documents re-indexés ({count} chunks)"}
+
+        # Vérifier que catalog.json existe et compter ses entrées
+        from pathlib import Path
+        from .config import settings as _s
+        import json as _json
+        catalog_path = Path(_s.data_dir) / "catalog.json"
+        if catalog_path.exists():
+            catalog_count = len(_json.loads(catalog_path.read_text(encoding="utf-8")))
+            catalog_status = f"{catalog_count} produits"
+        else:
+            catalog_status = "absent (échec de génération)"
+
+        return {
+            "status": "ok",
+            "rag": f"{count} chunks indexés",
+            "catalog": catalog_status,
+        }
     except Exception as exc:
         logger.error(f"Erreur reload documents : {exc}")
         raise HTTPException(status_code=500, detail=str(exc))

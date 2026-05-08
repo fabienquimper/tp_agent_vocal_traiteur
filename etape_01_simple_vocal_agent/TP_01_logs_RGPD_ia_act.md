@@ -88,7 +88,7 @@ qui contient (ou pourrait contenir) une donnée personnelle :
 
 **Questions :**
 
-**Q1.** Dans `nodes.py`, ligne ~58, que logue le nœud de transcription ?
+**Q1.** Dans `nodes.py`, ligne ~115, que logue le nœud de transcription ?
 Est-ce une donnée personnelle ? Pourquoi ?
 
 ```python
@@ -104,7 +104,13 @@ Quelles données personnelles apparaissent dans ce log ?
 Ces mêmes données transitent-elles par les logs ?
 
 **Q4.** Le service STT (`stt/app.py`) logue-t-il le contenu de ce que dit l'utilisateur ?
-Pourquoi est-ce un point d'attention même si la réponse est non ?
+Comparez les trois modes de déploiement (local Whisper, HuggingFace, Groq) — la réponse
+n'est pas la même pour tous.
+
+> **Note** : le projet supporte plusieurs providers STT selon la puissance du poste.
+> En mode local, le contenu n'est pas loggué. En mode cloud (HF/Groq), observez ce que
+> font les lignes ~115 et ~125. Ce décalage de comportement selon le provider est un
+> vrai cas d'école en contexte on-premise vs. cloud.
 
 ---
 
@@ -209,7 +215,7 @@ L'article 50 de l'AI Act dispose :
 Est-ce suffisant selon vous pour satisfaire l'obligation d'information ?
 Argumentez en vous appuyant sur la notion de "personne raisonnablement informée".
 
-**Q13.** Regardez la réponse système du LLM dans `nodes.py`, ligne ~163 :
+**Q13.** Regardez la réponse système du LLM dans `nodes.py`, ligne ~221 :
 
 ```python
 _RESPONSE_SYSTEM = """Tu es l'assistant vocal du Traiteur Dupont, une entreprise française
@@ -238,6 +244,17 @@ Qu'est-ce qui manque pour constituer un audit trail conforme ? Listez au moins 3
 
 *Indice : pensez à ce qu'un auditeur voudrait savoir : "qui a décidé quoi, quand, sur quelle base, avec quel modèle ?"*
 
+**Q14b.** *(Dimension supplémentaire — nouvelle architecture)*
+Le LLM est maintenant impliqué dans une deuxième décision automatisée : lors du
+`make reload-docs`, il lit `menus.txt` et génère `catalog.json` — le fichier qui
+détermine les prix facturés aux clients.
+
+Cette décision est-elle tracée dans les logs ? Qu'est-ce qu'un auditeur AI Act devrait
+pouvoir vérifier à propos de cette extraction automatique de prix ?
+
+*Indice : imaginez que le LLM génère le prix "42.0" pour "bœuf bourguignon" — comment
+savoir s'il a correctement lu le menu ou s'il a inventé ce prix ?*
+
 ---
 
 ## 5. Données bancaires — zone rouge
@@ -254,7 +271,7 @@ class PaymentSimulateRequest(BaseModel):
     cvv: str = ""
 ```
 
-Et l'utilisation, lignes ~606-609 :
+Et l'utilisation, lignes ~667-669 :
 
 ```python
 card = re.sub(r'[\s\-]', '', request.card_number)
@@ -289,12 +306,14 @@ indiquez : ✅ Conforme | ⚠️ Partiel | ❌ Non conforme | ❓ À vérifier
 - [ ] Logs ne contenant pas de DCP inutiles
 - [ ] Données stockées de façon sécurisée (chiffrement au repos)
 - [ ] Données bancaires traitées conformément à PCI-DSS
+- [ ] Endpoints d'administration protégés par authentification
 
 ### AI Act
 
 - [ ] Information explicite "vous interagissez avec une IA" (art. 50)
 - [ ] Réponse prévue si l'utilisateur demande si c'est une IA
 - [ ] Audit trail structuré des décisions LLM (version modèle, timestamp, intent)
+- [ ] Audit trail de la génération catalog.json (hash du menu, modèle, produits extraits)
 - [ ] Documentation technique du système (art. 11)
 
 ### Bonne pratique générale
