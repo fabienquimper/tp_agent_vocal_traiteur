@@ -1,0 +1,61 @@
+{{/*
+tts.yaml — TTS Piper Text-to-Speech
+Comparer avec k8s/tts.yaml (YAML brut étape 07) :
+  Avant : resources: requests: cpu: "200m"  (hardcodé)
+  Après : {{ toYaml .Values.tts.resources | nindent 12 }}
+
+  Avant : image: traiteur-tts:latest  (hardcodé)
+  Après : {{ include "traiteur.image" .Values.tts.image }}
+*/}}
+
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tts
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+    {{- include "traiteur.selectorLabels" "tts" | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "traiteur.selectorLabels" "tts" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "traiteur.labels" . | nindent 8 }}
+        {{- include "traiteur.selectorLabels" "tts" | nindent 8 }}
+    spec:
+      containers:
+        - name: tts
+          image: {{ include "traiteur.image" .Values.tts.image }}
+          imagePullPolicy: {{ .Values.tts.image.pullPolicy }}
+          ports:
+            - containerPort: 8002
+          resources:
+            {{- toYaml .Values.tts.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 5
+
+---
+# ── Service ───────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: tts
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "traiteur.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "traiteur.selectorLabels" "tts" | nindent 4 }}
+  ports:
+    - port: 8002
+      targetPort: 8002

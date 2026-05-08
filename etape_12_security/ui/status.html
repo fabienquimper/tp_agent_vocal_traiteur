@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traiteur Dupont – Statut des services</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #2E7D32; --bg: #F5F5F0; --surface: #fff;
+      --ok: #2E7D32; --ok-bg: #E8F5E9;
+      --err: #C62828; --err-bg: #FFEBEE;
+      --warn: #E65100; --warn-bg: #FFF3E0;
+      --radius: 10px; --shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: #212121; min-height: 100dvh; }
+    header {
+      background: var(--primary); color: #fff;
+      padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+    }
+    header h1 { font-size: 1.1rem; }
+    header a { margin-left: auto; color: rgba(255,255,255,.85); text-decoration: none; font-size: .9rem; }
+    header a:hover { color: #fff; }
+    main { max-width: 720px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
+    .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .card-header {
+      padding: 12px 18px; display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: .95rem; border-bottom: 1px solid #eee;
+    }
+    .card-body { padding: 14px 18px; font-size: .9rem; line-height: 1.6; }
+    .badge {
+      padding: 3px 10px; border-radius: 20px; font-size: .78rem; font-weight: 700;
+      margin-left: auto;
+    }
+    .badge-ok   { background: var(--ok-bg);   color: var(--ok); }
+    .badge-err  { background: var(--err-bg);  color: var(--err); }
+    .badge-warn { background: var(--warn-bg); color: var(--warn); }
+    .badge-spin { background: #eee; color: #666; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot-ok   { background: var(--ok); }
+    .dot-err  { background: var(--err); }
+    .dot-warn { background: var(--warn); }
+    .dot-spin { background: #aaa; animation: pulse .8s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .meta { color: #666; font-size: .82rem; margin-top: 4px; }
+    .tag { display: inline-block; background: #E8F5E9; color: #2E7D32; border-radius: 4px; padding: 1px 6px; font-size: .78rem; margin: 2px; }
+    .tag-miss { background: #FFEBEE; color: #C62828; }
+    .refresh-bar { font-size: .78rem; color: #888; text-align: right; }
+    .logs-box {
+      background: #1e1e1e; color: #d4d4d4; border-radius: var(--radius);
+      padding: 14px 18px; font-family: monospace; font-size: .82rem; line-height: 1.7;
+    }
+    .logs-box code { display: block; }
+    .logs-box .cmd { color: #9cdcfe; }
+    .logs-box .cmt { color: #6a9955; }
+    hr { border: none; border-top: 1px solid #eee; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:1.4rem">🍽️</span>
+  <h1>Traiteur Dupont – Monitoring</h1>
+  <a href="/">← Retour au chat</a>
+</header>
+
+<main>
+
+  <div class="refresh-bar" id="refreshBar">Chargement…</div>
+
+  <!-- Statut global -->
+  <div class="card" id="cardGlobal">
+    <div class="card-header">
+      <div class="dot dot-spin" id="dotGlobal"></div>
+      Statut global
+      <span class="badge badge-spin" id="badgeGlobal">…</span>
+    </div>
+  </div>
+
+  <!-- Services -->
+  <div class="card">
+    <div class="card-header">Services</div>
+    <div class="card-body" id="servicesBody">
+      <p class="meta">Chargement…</p>
+    </div>
+  </div>
+
+  <!-- Logs -->
+  <div class="card">
+    <div class="card-header">Consulter les logs</div>
+    <div class="card-body">
+      <p>Dans le terminal, depuis le dossier du projet :</p>
+      <div class="logs-box" style="margin-top:10px">
+        <code class="cmt"># Logs en temps réel de tous les services</code>
+        <code class="cmd">make logs</code>
+        <br>
+        <code class="cmt"># Logs d'un seul service (ex: agent)</code>
+        <code class="cmd">docker logs -f traiteur_agent</code>
+        <br>
+        <code class="cmt"># Re-indexer les documents RAG</code>
+        <code class="cmd">make reload-docs</code>
+        <br>
+        <code class="cmt"># Télécharger / vérifier le modèle Mistral</code>
+        <code class="cmd">make init-ollama</code>
+      </div>
+      <p class="meta" style="margin-top:10px">
+        API interactive (Swagger) :
+        <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a>
+      </p>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const LABELS = {
+  ollama: { name: 'Ollama (LLM Mistral)', icon: '🧠' },
+  stt:    { name: 'STT – Whisper',        icon: '🎙️' },
+  tts:    { name: 'TTS – Piper',          icon: '🔊' },
+  rag:    { name: 'RAG – ChromaDB',       icon: '📚' },
+};
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    render(data);
+  } catch (e) {
+    renderError(e.message);
+  }
+  document.getElementById('refreshBar').textContent =
+    'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR') + ' · Actualisation automatique toutes les 15 s';
+}
+
+function statusClass(s) { return s === 'ok' ? 'ok' : s === 'degraded' ? 'warn' : 'err'; }
+
+function render(data) {
+  const cls = statusClass(data.status);
+  const dot = document.getElementById('dotGlobal');
+  const badge = document.getElementById('badgeGlobal');
+  dot.className = `dot dot-${cls}`;
+  badge.className = `badge badge-${cls}`;
+  badge.textContent = data.status === 'ok' ? 'Tout opérationnel' : data.status === 'degraded' ? 'Dégradé' : 'Erreur';
+
+  const body = document.getElementById('servicesBody');
+  body.innerHTML = '';
+
+  for (const [key, info] of Object.entries(data.services || {})) {
+    const label = LABELS[key] || { name: key, icon: '⚙️' };
+    const sc = statusClass(info.status);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0';
+
+    let detail = '';
+    if (key === 'ollama' && info.models) {
+      const mistralOk = info.models.some(m => m.includes('mistral'));
+      detail = info.models.length
+        ? info.models.map(m => `<span class="tag ${m.includes('mistral') ? '' : 'tag-miss'}">${m}</span>`).join('')
+        : '<span class="tag tag-miss">Aucun modèle chargé – lancez <code>make init-ollama</code></span>';
+      if (!mistralOk && info.models.length)
+        detail += '<span class="tag tag-miss">mistral manquant</span>';
+    } else if (key === 'rag' && info.chunks !== undefined) {
+      detail = info.chunks === 0
+        ? '<span class="tag tag-miss">0 chunks – lancez <code>make reload-docs</code></span>'
+        : `<span class="tag">${info.chunks} chunks indexés</span>`;
+    } else if (info.error) {
+      detail = `<span style="color:var(--err);font-size:.82rem">${info.error}</span>`;
+    }
+
+    row.innerHTML = `
+      <div class="dot dot-${sc}" style="margin-top:4px;flex-shrink:0"></div>
+      <div style="flex:1">
+        <strong>${label.icon} ${label.name}</strong>
+        ${detail ? `<div class="meta" style="margin-top:3px">${detail}</div>` : ''}
+      </div>
+      <span class="badge badge-${sc}">${info.status}</span>
+    `;
+    body.appendChild(row);
+  }
+}
+
+function renderError(msg) {
+  document.getElementById('dotGlobal').className = 'dot dot-err';
+  document.getElementById('badgeGlobal').className = 'badge badge-err';
+  document.getElementById('badgeGlobal').textContent = 'Inaccessible';
+  document.getElementById('servicesBody').innerHTML =
+    `<p style="color:var(--err)">Impossible de joindre l'agent : ${msg}</p>`;
+}
+
+refresh();
+setInterval(refresh, 15_000);
+</script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CD Pipeline — Traiteur Dupont Agent Vocal
+# Étape 08 : CI/CD
+#
+# Ce pipeline déploie sur un cluster kind éphémère dans GitHub Actions.
+#
+# Pourquoi kind dans GitHub Actions ?
+#   Les runners GitHub ont ~7 GB RAM — suffisant pour notre stack allégée.
+#   Ollama + Mistral (~4 GB) est TROP lourd → on utilise mock-ollama.
+#   STT + TTS tournent normalement (Whisper base + Piper).
+#
+# Architecture CI vs Production :
+#   Production   : ollama (Mistral 7B) + stt-blue + stt-green + tts + agent + ui
+#   CI (ce pipeline) : mock-ollama + stt-blue + tts + agent + ui
+#
+# Tests qui s'exécutent (sans Ollama réel) :
+#   - test_smoke.py      → health, métriques, /api/rag/search
+#   - test_rag_quality.py → quality gate RAG (ChromaDB, sans LLM)
+#   Ces deux suites de tests ne nécessitent PAS Ollama (pas d'appels LLM).
+#
+# Déclenchement :
+#   - Push sur main (après CI réussie)
+#   - Manuel via workflow_dispatch
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CD
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Raison du déploiement manuel"
+        required: false
+        default: "Test CD manuel"
+
+# Le CD ne doit s'exécuter qu'après la CI
+# (en pratique, `needs` inter-workflows n'existe pas nativement —
+#  on utilise le déclenchement par push sur main qui passe par la CI d'abord)
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false  # Ne jamais annuler un déploiement en cours
+
+jobs:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Job unique : Deploy & Test sur cluster kind éphémère
+  # ══════════════════════════════════════════════════════════════════════════
+  deploy-and-test:
+    name: "Deploy on kind + Smoke Tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Cluster kind ────────────────────────────────────────────────────
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: traiteur
+          config: kind-config.yaml
+          version: "v0.25.0"
+          kubectl_version: "v1.31.0"
+
+      - name: Verify cluster
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+          echo "✓ Cluster kind 'traiteur' prêt"
+
+      # ── Build des images ────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build mock-ollama (remplace Ollama en CI)
+        run: |
+          docker build -t mock-ollama:ci mock-ollama/
+          echo "✓ mock-ollama buildé"
+
+      - name: Build agent
+        uses: docker/build-push-action@v5
+        with:
+          context: services/agent
+          push: false
+          tags: traiteur-agent:ci
+          load: true
+          cache-from: type=gha
+
+      - name: Build STT
+        uses: docker/build-push-action@v5
+        with:
+          context: services/stt
+          push: false
+          tags: traiteur-stt:ci
+          load: true
+          cache-from: type=gha
+
+      - name: Build TTS
+        uses: docker/build-push-action@v5
+        with:
+          context: services/tts
+          push: false
+          tags: traiteur-tts:ci
+          load: true
+          cache-from: type=gha
+
+      - name: Build UI
+        uses: docker/build-push-action@v5
+        with:
+          context: ui
+          push: false
+          tags: traiteur-ui:ci
+          load: true
+          cache-from: type=gha
+
+      # ── Chargement dans kind ────────────────────────────────────────────
+      - name: Load images into kind cluster
+        run: |
+          kind load docker-image mock-ollama:ci      --name traiteur
+          kind load docker-image traiteur-agent:ci   --name traiteur
+          kind load docker-image traiteur-stt:ci     --name traiteur
+          kind load docker-image traiteur-tts:ci     --name traiteur
+          kind load docker-image traiteur-ui:ci      --name traiteur
+          echo "✓ Images chargées dans le cluster"
+
+      # ── Déploiement K8s ─────────────────────────────────────────────────
+      - name: Apply namespace and ConfigMaps
+        run: |
+          kubectl apply -f k8s/00-namespace.yaml
+          kubectl apply -f k8s/01-configmap.yaml
+          kubectl create configmap traiteur-data \
+            --from-file=data/ -n traiteur --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create configmap traiteur-eval \
+            --from-file=eval/ -n traiteur --dry-run=client -o yaml | kubectl apply -f -
+          echo "✓ Namespace + ConfigMaps appliqués"
+
+      - name: Deploy mock-ollama (remplace ollama.yaml en CI)
+        run: |
+          kubectl apply -f k8s/ci/mock-ollama.yaml
+          kubectl rollout status deployment/ollama -n traiteur --timeout=60s
+          echo "✓ mock-ollama déployé"
+
+      - name: Deploy all services (except ollama — already deployed as mock)
+        run: |
+          # Appliquer tous les manifestes sauf ollama.yaml (déjà déployé comme mock)
+          for f in k8s/*.yaml; do
+            name=$(basename "$f")
+            if [ "$name" != "ollama.yaml" ]; then
+              kubectl apply -f "$f"
+            fi
+          done
+          echo "✓ Services déployés"
+
+      - name: Wait for STT and TTS
+        run: |
+          kubectl rollout status deployment/stt-blue -n traiteur --timeout=180s
+          kubectl rollout status deployment/tts      -n traiteur --timeout=180s
+          echo "✓ STT + TTS prêts"
+
+      - name: Wait for agent (ChromaDB rebuild ~60-90s)
+        run: |
+          kubectl rollout status deployment/agent -n traiteur --timeout=300s
+          echo "✓ Agent prêt"
+
+      - name: Show cluster state
+        if: always()
+        run: |
+          kubectl get pods -n traiteur -o wide
+          kubectl get services -n traiteur
+
+      # ── Tests ───────────────────────────────────────────────────────────
+      - name: Setup Python for tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt -q
+
+      - name: Wait for agent HTTP (port-forward)
+        run: |
+          # Port-forward l'agent sur localhost:8000 en arrière-plan
+          kubectl port-forward svc/agent 8000:8000 -n traiteur &
+          PF_PID=$!
+          echo "PF_PID=$PF_PID" >> $GITHUB_ENV
+          # Attendre que le port soit disponible
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✓ Agent accessible sur localhost:8000"
+              break
+            fi
+            echo "Attente agent... ($i/30)"
+            sleep 3
+          done
+
+      - name: Run smoke tests
+        env:
+          AGENT_URL: http://localhost:8000
+        run: |
+          python -m pytest tests/test_smoke.py -v --tb=short
+          echo "✓ Smoke tests passed"
+
+      - name: Run RAG quality gate tests
+        env:
+          AGENT_URL: http://localhost:8000
+        run: |
+          python -m pytest tests/test_rag_quality.py -v --tb=short
+          echo "✓ RAG quality gate tests passed"
+
+      # ── Résumé ──────────────────────────────────────────────────────────
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════"
+          echo "  ✓ CD Pipeline réussi !"
+          echo "  Commit : ${{ github.sha }}"
+          echo "  Branch : ${{ github.ref_name }}"
+          echo "  Tests  : smoke + RAG quality gate — OK"
+          echo "════════════════════════════════════════════════"
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Logs agent ==="
+          kubectl logs -n traiteur -l app=agent --tail=50 || true
+          echo "=== Logs stt-blue ==="
+          kubectl logs -n traiteur -l app=stt,color=blue --tail=20 || true
+          echo "=== Logs mock-ollama ==="
+          kubectl logs -n traiteur -l app=ollama --tail=20 || true
+
+      - name: Cleanup port-forward
+        if: always()
+        run: |
+          kill $PF_PID 2>/dev/null || true

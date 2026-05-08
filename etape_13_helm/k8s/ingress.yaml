@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ingress.yaml — NGINX Ingress avec annotations Canary
+# Étape 11 : Canary Release
+#
+# Architecture du trafic :
+#
+#   Client (localhost:8081)
+#       │
+#       ▼
+#   NGINX Ingress Controller
+#       │
+#       ├── 90% ──▶ Service "agent"         (stable, 2+ replicas)
+#       └── 10% ──▶ Service "agent-canary"  (canary, 1 replica)
+#
+# Comment fonctionne le split NGINX :
+#   L'ingress canary (agent-canary-ingress) est une COPIE de l'ingress stable,
+#   avec des annotations spéciales `nginx.ingress.kubernetes.io/canary-*`.
+#   NGINX lit ces annotations et distribue le trafic selon le poids configuré.
+#
+# Pour changer le % de trafic canary :
+#   kubectl annotate ingress agent-canary-ingress \
+#     nginx.ingress.kubernetes.io/canary-weight="20" \
+#     --overwrite -n traiteur
+#
+# Pour rollback (0% de trafic vers canary) :
+#   kubectl annotate ingress agent-canary-ingress \
+#     nginx.ingress.kubernetes.io/canary-weight="0" \
+#     --overwrite -n traiteur
+#
+# Ports :
+#   L'ingress écoute sur le port 80 du nœud kind.
+#   kind-config.yaml mappe containerPort:80 → hostPort:8081.
+#   Accès : http://localhost:8081/health, http://localhost:8081/api/text, etc.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Ingress Stable — tout le trafic par défaut ────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-ingress
+  namespace: traiteur
+  annotations:
+    # Indique que NGINX Ingress Controller doit gérer cet Ingress
+    kubernetes.io/ingress.class: nginx
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agent      # service stable
+                port:
+                  number: 8000
+
+---
+# ── Ingress Canary — traffic splitting par annotations ────────────────────────
+#
+# RÈGLE : l'ingress canary DOIT avoir les mêmes rules que l'ingress stable.
+# NGINX utilise la correspondance de path pour appliquer le canary weight.
+#
+# Annotations clés :
+#   canary: "true"         → active le mode canary pour cet ingress
+#   canary-weight: "10"    → 10% du trafic va vers le backend canary
+#                            (modifiable sans redémarrer NGINX)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-canary-ingress
+  namespace: traiteur
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # ── Annotations Canary NGINX ────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"   # 10% initial
+    # canary-weight-total: 100 par défaut (base de calcul du pourcentage)
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /             # même path que l'ingress stable
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-canary   # service canary
+                port:
+                  number: 8000

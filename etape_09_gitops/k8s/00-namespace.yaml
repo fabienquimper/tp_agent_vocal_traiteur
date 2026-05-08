@@ -1,0 +1,22 @@
+# Namespace — espace de noms isolé pour tous les services Traiteur Dupont
+#
+# Pourquoi un namespace ?
+#   Un namespace isole les ressources K8s : deux namespaces peuvent avoir
+#   des services avec le même nom sans conflit.
+#   C'est l'équivalent K8s des environments staging/production.
+#   (Équivalent de docker-compose.staging.yml mais avec des namespaces K8s)
+#
+# Équivalents K8s ↔ Docker Compose :
+#   namespace    ↔  project name (COMPOSE_PROJECT_NAME)
+#   pod          ↔  container
+#   deployment   ↔  service avec replicas
+#   service      ↔  expose des ports (networks)
+#   configmap    ↔  environment variables / volumes de config
+#   pvc          ↔  volumes nommés
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traiteur
+  labels:
+    app.kubernetes.io/name: traiteur-dupont
+    app.kubernetes.io/part-of: tp-agent-vocal
