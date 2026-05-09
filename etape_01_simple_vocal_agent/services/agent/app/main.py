@@ -525,6 +525,77 @@ async def _process_request(
     if session_id:
         session = _get_session(session_id)
         if session and session.step not in ("complete",):
+            # Classifier d'abord : si l'utilisateur pose une question info pendant
+            # une commande en cours, on répond via le RAG puis on rappelle l'étape.
+            graph = get_graph()
+            state = _build_initial_state(text_input=text_input or "", skip_tts=True)
+            try:
+                result = await asyncio.to_thread(graph.invoke, state)
+            except Exception as exc:
+                return _friendly_error_response(text_input or "", exc)
+
+            _step_reminders = {
+                "awaiting_name": "Pour finaliser votre commande, pourriez-vous me donner votre nom et prénom ?",
+                "awaiting_phone": "Pourriez-vous me donner votre numéro de téléphone pour finaliser votre commande ?",
+                "awaiting_payment": "Souhaitez-vous régler par carte bancaire (CB) ou en liquide ?",
+            }
+
+            if result.get("intent") == "info":
+                # Question pendant une commande en cours → répondre + rappeler l'étape
+                info_text = result.get("response_text", "")
+                reminder = _step_reminders.get(session.step, "")
+                combined = f"{info_text}\n\nEt pour votre commande en cours : {reminder}" if reminder else info_text
+                audio = await _call_tts(combined, skip_tts)
+                intent_label = "commande_complexe" if session.is_complex else "commande_simple"
+                return AgentResponse(
+                    transcript=result.get("text_input", text_input or ""),
+                    intent=intent_label,
+                    order_items=session.order_items,
+                    response_text=combined,
+                    audio_base64=_audio_b64(audio),
+                    session_id=session.session_id,
+                    order_step=session.step,
+                    order_total=session.total,
+                )
+
+            if result.get("intent") in ("commande_simple", "commande_complexe"):
+                # Ajout d'articles à la commande en cours → fusionner
+                new_items = result.get("order_items") or []
+                if new_items:
+                    existing = {item["produit"].lower(): item for item in session.order_items}
+                    for item in new_items:
+                        key = item["produit"].lower()
+                        if key in existing:
+                            existing[key] = {**existing[key], "quantite": existing[key]["quantite"] + item["quantite"]}
+                        else:
+                            existing[key] = dict(item)
+                    session.order_items = list(existing.values())
+                    session.total = compute_total(session.order_items)
+                    from .config import settings as _cfg
+                    total_units = sum(i["quantite"] for i in session.order_items)
+                    session.is_complex = total_units > _cfg.order_complexity_threshold
+
+                added_str = ", ".join(f"{i['quantite']}× {i['produit']}" for i in new_items)
+                cart_str = ", ".join(f"{i['quantite']}× {i['produit']}" for i in session.order_items)
+                reminder = _step_reminders.get(session.step, "")
+                response_text = (
+                    f"J'ai ajouté {added_str} à votre commande. "
+                    f"Votre panier : {cart_str} — total estimé : {session.total:.2f} €. "
+                    f"{reminder}"
+                )
+                audio = await _call_tts(response_text, skip_tts)
+                intent_label = "commande_complexe" if session.is_complex else "commande_simple"
+                return AgentResponse(
+                    transcript=result.get("text_input", text_input or ""),
+                    intent=intent_label,
+                    order_items=session.order_items,
+                    response_text=response_text,
+                    audio_base64=_audio_b64(audio),
+                    session_id=session.session_id,
+                    order_step=session.step,
+                    order_total=session.total,
+                )
+
             return await _handle_session_step(session, text_input, skip_tts)
 
     # ── Pas de session active : on passe par le graphe ───────────────────────
@@ -632,7 +703,8 @@ async def process_voice(
         except Exception as exc:
             logger.error(f"STT error : {exc}")
             raise HTTPException(status_code=500, detail="Erreur de transcription")
-        return await _handle_session_step(session, transcript, skip_tts=False)
+        # Passer par _process_request pour bénéficier de la détection des questions info
+    return await _process_request(text_input=transcript, session_id=session_id, skip_tts=False)
 
     return await _process_request(audio_bytes=audio_bytes, session_id=session_id or None)
 

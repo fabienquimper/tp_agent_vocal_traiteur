@@ -28,13 +28,14 @@ C'est une philosophie : **les données personnelles appartiennent aux personnes,
 
 Les 5 principes que vous rencontrerez dans ce TP :
 
-| Principe | Ce que ça veut dire en vrai |
-|---|---|
-| **Finalité** | On collecte les données pour une raison précise, et on ne s'en sert pas pour autre chose. |
-| **Minimisation** | On ne collecte que ce dont on a besoin. Pas de "au cas où". |
-| **Durée limitée** | On efface ce qu'on n'a plus besoin. Les données ne sont pas éternelles. |
-| **Sécurité** | On protège les données contre les accès non autorisés et les fuites. |
-| **Transparence** | La personne sait ce qu'on fait avec ses données, avant qu'on le fasse. |
+
+| Principe            | Ce que ça veut dire en vrai                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| **Finalité**       | On collecte les données pour une raison précise, et on ne s'en sert pas pour autre chose. |
+| **Minimisation**    | On ne collecte que ce dont on a besoin. Pas de "au cas où".                                |
+| **Durée limitée** | On efface ce qu'on n'a plus besoin. Les données ne sont pas éternelles.                   |
+| **Sécurité**      | On protège les données contre les accès non autorisés et les fuites.                    |
+| **Transparence**    | La personne sait ce qu'on fait avec ses données, avant qu'on le fasse.                     |
 
 > **Anecdote réelle** : En 2019, la CNIL a infligé 50 millions d'euros d'amende à Google pour
 > manque de transparence lors de la création d'un compte Android. Le problème ? Les informations
@@ -79,7 +80,7 @@ Pas de fichier, pas de rotation, pas de durée de rétention — ils vivent tant
 
 ### 2.2 Exercice 1 — Chasse aux données personnelles dans les logs
 
-**Objectif** : identifier tous les endroits du code où des données personnelles (DCP) sont écrites dans les logs.
+**Objectif** : identifier tous les endroits du code où des données personnelles (DCP, Donnée à Caractère Personnel) sont écrites dans les logs.
 
 Parcourez les fichiers suivants et listez chaque appel `logger.info()` ou `logger.error()`
 qui contient (ou pourrait contenir) une donnée personnelle :
@@ -122,18 +123,19 @@ Voici le flux d'une commande vocale dans notre système. Complétez le tableau e
 à chaque étape quelles données personnelles sont présentes et si elles sont **loggées**,
 **persistées** (stockées durablement) ou **juste en mémoire**.
 
-| Étape | Données présentes | Loggée ? | Persistée ? | En mémoire ? |
-|---|---|---|---|---|
-| 1. Audio reçu par `/api/voice` | Voix brute de l'utilisateur | | | |
-| 2. Transcription STT | Texte transcrit | | | |
-| 3. Classification LLM | Texte + intent | | | |
-| 4. Session créée | Nom, prénom (pas encore) | | | |
-| 5. Collecte nom/prénom | Nom, prénom | | | |
-| 6. Collecte téléphone | Téléphone | | | |
-| 7. Collecte mode de paiement | Mode de paiement | | | |
-| 8. Collecte CB (`/api/payment/simulate`) | Numéro de carte, CVV, expiry | | | |
-| 9. Finalisation commande | Tout + total | | | |
-| 10. Écriture Excel | Nom, prénom, tel, paiement | | | |
+
+| Étape                                   | Données présentes           | Loggée ? | Persistée ? | En mémoire ? |
+| ---------------------------------------- | ----------------------------- | --------- | ------------ | ------------- |
+| 1. Audio reçu par`/api/voice`           | Voix brute de l'utilisateur   |           |              |               |
+| 2. Transcription STT                     | Texte transcrit               |           |              |               |
+| 3. Classification LLM                    | Texte + intent                |           |              |               |
+| 4. Session créée                       | Nom, prénom (pas encore)     |           |              |               |
+| 5. Collecte nom/prénom                  | Nom, prénom                  |           |              |               |
+| 6. Collecte téléphone                  | Téléphone                   |           |              |               |
+| 7. Collecte mode de paiement             | Mode de paiement              |           |              |               |
+| 8. Collecte CB (`/api/payment/simulate`) | Numéro de carte, CVV, expiry |           |              |               |
+| 9. Finalisation commande                 | Tout + total                  |           |              |               |
+| 10. Écriture Excel                      | Nom, prénom, tel, paiement   |           |              |               |
 
 *Conseil : ouvrez `main.py` et suivez le code de `_handle_session_step` et `_finalize_order`.*
 
@@ -146,6 +148,7 @@ Voici le flux d'une commande vocale dans notre système. Complétez le tableau e
 Ouvrez `ui/traiteur.html` et regardez l'interface utilisateur (c'est le chat principal de l'agent).
 
 **Q5.** L'utilisateur voit-il une information lui indiquant :
+
 - Qu'il va interagir avec une IA ?
 - Quelles données seront collectées ?
 - Comment seront-elles utilisées ?
@@ -181,6 +184,7 @@ Regardez `orders/writer.py` — y a-t-il une durée de conservation définie pou
 
 **Q9.** Selon le RGPD (article 5.1.e), les données doivent être conservées "le temps nécessaire
 à la finalité". Pour une commande traiteur :
+
 - Quelle durée serait raisonnable selon vous ?
 - Quelle durée est requise par la loi française pour les données comptables ?
   *(Indice : Code de commerce, article L123-22)*
@@ -194,6 +198,7 @@ L'article 17 donne le droit à l'effacement ("droit à l'oubli").
 
 **Q10.** Parcourez tous les endpoints FastAPI dans `main.py` (cherchez les `@app.`).
 Y a-t-il un endpoint permettant à un client de :
+
 - Consulter ses commandes ?
 - Demander l'effacement de ses données ?
 
@@ -217,13 +222,15 @@ L'article 50 de l'AI Act dispose :
 Est-ce suffisant selon vous pour satisfaire l'obligation d'information ?
 Argumentez en vous appuyant sur la notion de "personne raisonnablement informée".
 
-**Q13.** Regardez la réponse système du LLM dans `nodes.py`, ligne ~221 :
+**Q13.** Regardez la réponse système du LLM dans `nodes.py`, ligne ~292 :
 
 ```python
 _RESPONSE_SYSTEM = """Tu es l'assistant vocal du Traiteur Dupont, une entreprise française de restauration traiteur à Dijon.
 Tu réponds en français, avec chaleur et professionnalisme.
-Sois CONCIS : 1 à 3 phrases maximum, car ta réponse sera lue à voix haute.
-N'utilise pas de listes à puces ni de markdown dans ta réponse."""
+N'utilise pas de listes à puces ni de markdown dans ta réponse.
+Si le client demande une liste complète (tous les plats, toutes les entrées, tout le menu…), \
+cite TOUS les articles disponibles dans le contexte avec leur prix — sois généreux et exhaustif.
+Sinon, sois concis : 1 à 3 phrases maximum, car ta réponse sera lue à voix haute."""
 ```
 
 Observez ce prompt attentivement. Le développeur a clairement réfléchi à l'expérience vocale :
@@ -239,7 +246,7 @@ Y a-t-il une instruction à ce sujet dans le prompt système ?
 L'AI Act exige que les systèmes d'IA maintiennent des journaux permettant de comprendre
 les décisions automatisées prises.
 
-Regardez les logs de classification dans `nodes.py`, ligne ~130 :
+Regardez les logs de classification dans `nodes.py`, ligne ~189 :
 
 ```python
 logger.info(f"Intent='{intent}' topic='{topic}' items={order_items}")
@@ -303,43 +310,45 @@ indiquez : ✅ Conforme | ⚠️ Partiel | ❌ Non conforme | ❓ À vérifier
 
 ### RGPD
 
-- [ ] Information de l'utilisateur avant la collecte (art. 13/14)
-- [ ] Base légale du traitement identifiée et documentée (art. 6)
-- [ ] Durée de conservation définie et appliquée (art. 5.1.e)
-- [ ] Droit d'accès aux données implémenté (art. 15)
-- [ ] Droit à l'effacement implémenté (art. 17)
-- [ ] Données minimales collectées (pas de "au cas où")
-- [ ] Logs ne contenant pas de DCP inutiles
-- [ ] Données stockées de façon sécurisée (chiffrement au repos)
-- [ ] Données bancaires traitées conformément à PCI-DSS
-- [ ] Endpoints d'administration protégés par authentification
+- [ ]  Information de l'utilisateur avant la collecte (art. 13/14)
+- [ ]  Base légale du traitement identifiée et documentée (art. 6)
+- [ ]  Durée de conservation définie et appliquée (art. 5.1.e)
+- [ ]  Droit d'accès aux données implémenté (art. 15)
+- [ ]  Droit à l'effacement implémenté (art. 17)
+- [ ]  Données minimales collectées (pas de "au cas où")
+- [ ]  Logs ne contenant pas de DCP inutiles
+- [ ]  Données stockées de façon sécurisée (chiffrement au repos)
+- [ ]  Données bancaires traitées conformément à PCI-DSS
+- [ ]  Endpoints d'administration protégés par authentification
 
 ### AI Act
 
-- [ ] Information explicite "vous interagissez avec une IA" (art. 50)
-- [ ] Réponse prévue si l'utilisateur demande si c'est une IA
-- [ ] Audit trail structuré des décisions LLM (version modèle, timestamp, intent)
-- [ ] Audit trail de la génération catalog.json (hash du menu, modèle, produits extraits)
-- [ ] Déclenchement de `/api/reload-documents` tracé (qui, quand, depuis quelle IP)
-- [ ] Documentation technique du système (art. 11)
+- [ ]  Information explicite "vous interagissez avec une IA" (art. 50)
+- [ ]  Réponse prévue si l'utilisateur demande si c'est une IA
+- [ ]  Audit trail structuré des décisions LLM (version modèle, timestamp, intent)
+- [ ]  Audit trail de la génération catalog.json (hash du menu, modèle, produits extraits)
+- [ ]  Déclenchement de `/api/reload-documents` tracé (qui, quand, depuis quelle IP)
+- [ ]  Documentation technique du système (art. 11)
 
 ### Bonne pratique générale
 
-- [ ] Politique de rotation des logs définie
-- [ ] Aucune DCP dans les messages d'erreur exposés à l'utilisateur
-- [ ] Volumes Docker protégés en accès
+- [ ]  Politique de rotation des logs définie
+- [ ]  Aucune DCP dans les messages d'erreur exposés à l'utilisateur
+- [ ]  Volumes Docker protégés en accès
 
 ---
 
 ## 7. Pour aller plus loin
 
 **Textes de référence** :
+
 - CNIL — Guide pratique de la sécurité des données personnelles (2023)
 - CNIL — Recommandation sur les systèmes d'IA (délibération 2023-011)
 - AI Act — Articles 50 (transparence) et 13 (information)
 - OWASP LLM Top 10 — LLM06 (Sensitive Information Disclosure)
 
 **À méditer** :
+
 > "Le RGPD n'est pas un obstacle à l'innovation. C'est un cadre qui oblige à réfléchir
 > avant d'agir. Les entreprises qui l'intègrent dès la conception (*privacy by design*)
 > évitent les refontes coûteuses — et les amendes." — Max Schrems, NOYB (2022)

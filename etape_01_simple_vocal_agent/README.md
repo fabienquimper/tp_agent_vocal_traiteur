@@ -20,12 +20,10 @@ Agent conversationnel vocal pour un traiteur français, basé sur LangGraph + mo
         │  │  Graphe LangGraph              │ │
         │  │                                │ │
         │  │  transcribe → classify → route │ │
-        │  │       ↓            ↓           │ │
-        │  │  search_rag  process_order     │ │
-        │  │       ↓            ↓           │ │
-        │  │     generate_response          │ │
-        │  │           ↓                    │ │
-        │  │      synthesize                │ │
+        │  │                 ↓ (info)  ↓    │ │
+        │  │  search_rag ────────→ generate │ │
+        │  │                         ↓      │ │
+        │  │                    synthesize  │ │
         │  └────────────────────────────────┘ │
         └──────┬────────────┬────────────┬────┘
                │            │            │
@@ -50,15 +48,19 @@ Agent conversationnel vocal pour un traiteur français, basé sur LangGraph + mo
 
 ```
 START
-  └─→ [transcribe]      Si audio : appel STT → texte
-  └─→ [classify]        LLM : intent + extraction articles
-  └─→ route conditionnelle
-        ├── "info"           → [search_rag] → [generate_response]
-        ├── "commande_*"     → [process_order] → [generate_response]
-        └── "autre"          → [generate_response]
-  └─→ [synthesize]      Appel TTS → audio WAV
+  └─→ [transcribe]        Si audio : appel STT → texte
+        └─→ [classify]    LLM : intent + extraction articles
+              └─→ route conditionnelle
+                    ├── "info"        → [search_rag] → [generate_response]
+                    └── "commande_*"  ──────────────→ [generate_response]
+                    └── "autre"       ──────────────→ [generate_response]
+                                              └─→ [synthesize]  TTS → audio WAV
 END
 ```
+
+> Les commandes ne passent pas par un nœud dédié dans le graphe.
+> La collecte des infos client (nom, téléphone, paiement) et l'écriture Excel
+> sont gérées par la couche session de `main.py`, en dehors du graphe.
 
 ### Logique commandes
 
@@ -74,7 +76,69 @@ Le seuil est configurable via `ORDER_COMPLEXITY_THRESHOLD` dans `.env`.
 ### Prérequis
 
 - Docker Engine ≥ 24 avec Docker Compose
-- 8 Go de RAM minimum recommandés (Mistral 7B ~4 Go)
+- 4 Go de RAM minimum (8 Go recommandés pour le mode local Ollama)
+
+### Quel mode choisir ?
+
+> **Lisez ceci avant de lancer la moindre commande.**
+
+| Votre situation | Mode recommandé |
+|---|---|
+| PC modeste, WSL2, pas de GPU → **choix par défaut** | [**Mode Groq**](#option-a--mode-groq-recommandé) — API cloud gratuite, ~1–3 s/réponse |
+| PC puissant avec GPU NVIDIA, usage hors-ligne | [Mode local Ollama](#option-b--mode-local-ollama) — tout reste sur votre machine |
+| Token HuggingFace déjà disponible | [Mode HuggingFace](#mode-huggingface-apis-distantes) — en bas de page |
+
+---
+
+### Option A — Mode Groq (recommandé)
+
+Groq fournit gratuitement un LLM et un STT via API cloud. Aucun modèle lourd à télécharger.
+
+**1. Obtenir une clé API gratuite**
+
+Créer un compte sur [console.groq.com/keys](https://console.groq.com/keys) et générer une clé (`gsk_xxxxxxxxxxxx`).
+
+**2. Configurer `.env`**
+
+```bash
+cd etape_01_simple_vocal_agent
+cp .env.example .env
+```
+
+Ajouter dans `.env` :
+```
+GROQ_API_KEY=gsk_xxxxxxxxxxxx
+GROQ_LLM_MODEL=llama-3.3-70b-versatile
+```
+
+**3. Lancer**
+
+```bash
+make build-groq && make up-groq
+make reload-docs
+```
+
+**4. Ouvrir [http://localhost:3000](http://localhost:3000)**
+
+> Premier build : ~3–5 min (télécharge Whisper ~250 Mo et piper). Les suivants sont quasi-instantanés.
+
+---
+
+### Option B — Mode local Ollama
+
+Tout tourne sur votre machine. Requiert un GPU NVIDIA ou beaucoup de patience (~30–120 s/réponse sur CPU).
+
+```bash
+cd etape_01_simple_vocal_agent
+cp .env.example .env
+make init-all   # build + démarrage + téléchargement Mistral 7B (~4 Go)
+```
+
+> Premier démarrage : 10–30 min selon votre connexion. À ne lancer qu'une fois.
+
+Ouvrir [http://localhost:3000](http://localhost:3000)
+
+---
 
 ### Résolution des problèmes connus (Ubuntu 24.04 Noble + Docker 28.x)
 
@@ -201,27 +265,7 @@ nvidia-container-cli info
 
 Le Makefile détecte automatiquement le GPU (`nvidia-container-cli info`) et charge `docker-compose.gpu.yml` si disponible.
 
-### 1. Cloner / se positionner
-
-```bash
-cd etape_01_simple_vocal_agent
-cp .env.example .env
-```
-
-### 2. Build + démarrage (première fois)
-
-```bash
-make init-all
-```
-
-Cette commande :
-1. Construit les 4 images Docker (télécharge Whisper, piper, sentence-transformers)
-2. Démarre tous les services
-3. Télécharge le modèle Mistral dans Ollama (~4 Go, une seule fois)
-
-### 3. Utilisation
-
-Ouvrir **http://localhost:3000**
+### Utilisation
 
 - **Texte** : saisir un message et appuyer sur Entrée ou ►
 - **Voix** : maintenir le bouton 🎤, parler, relâcher
@@ -229,13 +273,17 @@ Ouvrir **http://localhost:3000**
 ### Commandes utiles
 
 ```bash
-make up           # Démarrer les services
-make down         # Arrêter
-make logs         # Logs en temps réel
-make test         # Smoke tests curl
-make test-health  # Santé de chaque service
-make reload-docs  # Re-indexer data/ dans ChromaDB
-make clean        # Tout supprimer (volumes inclus)
+make up                  # Démarrer les services (mode Ollama local)
+make down                # Arrêter
+make logs                # Logs en temps réel
+make test                # Smoke tests curl
+make test-health         # Santé de chaque service
+make reload-docs         # Re-indexer data/ dans ChromaDB
+make clean               # Tout supprimer (volumes inclus)
+
+# Mode Groq (LLM + STT via API cloud)
+make up-groq             # Démarrer en mode Groq (GROQ_API_KEY requis dans .env)
+make build-groq-nocache  # Rebuild agent uniquement sans cache (après modif Python)
 ```
 
 ---
@@ -394,6 +442,55 @@ make up   # redémarre avec Ollama local
 | Coût                  | Gratuit                     | Gratuit (quota API HF)      |
 | Disponibilité         | Toujours (hors-ligne OK)    | Nécessite Internet          |
 | Qualité STT           | Whisper base (correct)      | Whisper large-v3 (excellent)|
+
+---
+
+## Mode Groq (LLM + STT cloud, recommandé sur PC modeste)
+
+Si votre machine est trop lente pour Ollama (pas de GPU, WSL2 limité en RAM), Groq propose un LLM et un STT **gratuits et rapides** via API cloud.
+
+| Service | Modèle Groq |
+|---------|------------|
+| STT     | `whisper-large-v3-turbo` |
+| LLM     | `llama-3.3-70b-versatile` (ou `llama-3.1-8b-instant`) |
+| TTS     | piper local (inchangé) |
+
+### 1. Obtenir une clé Groq (gratuit)
+
+1. Créer un compte sur [console.groq.com](https://console.groq.com)
+2. Générer une API Key (`gsk_xxxxxxxxxxxx`)
+3. L'ajouter dans `.env` : `GROQ_API_KEY=gsk_xxxxxxxxxxxx`
+
+### 2. Démarrer en mode Groq
+
+```bash
+# Première fois ou après changement des dépendances :
+make build-groq && make up-groq
+make reload-docs # Mise à jour des embeddings (du menu)
+
+# Après modification du code Python seulement (plus rapide) :
+make build-groq-nocache && make up-groq
+make reload-docs
+```
+
+> **Remarque WSL2** : `make build-groq-nocache` ne reconstruit que l'image agent, sans re-télécharger Whisper (~1 Go). À préférer à `make build-nocache` qui peut saturer WSL2.
+
+### 3. Changer de modèle LLM
+
+Dans `.env` :
+```
+GROQ_LLM_MODEL=llama-3.3-70b-versatile   # plus précis, recommandé
+# GROQ_LLM_MODEL=llama-3.1-8b-instant    # plus rapide (~1 s)
+```
+
+### Comparaison des modes
+
+| Critère            | Mode local (Ollama)        | Mode HuggingFace           | Mode Groq                  |
+|--------------------|----------------------------|----------------------------|----------------------------|
+| Confidentialité    | 100 % (aucune donnée sortante) | Audio/texte envoyés à HF | Audio/texte envoyés à Groq |
+| Vitesse (sans GPU) | Lent (30–120 s/requête LLM)| ~2–5 s                    | **~1–3 s**                 |
+| Coût               | Gratuit                    | Gratuit (quota mensuel)    | Gratuit (quota/minute)     |
+| Disponibilité      | Hors-ligne OK              | Nécessite Internet         | Nécessite Internet         |
 
 ---
 

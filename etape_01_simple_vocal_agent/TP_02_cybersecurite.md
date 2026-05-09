@@ -192,14 +192,15 @@ messages = [
 ]
 ```
 
-**Nœud `generate_response`** (lignes ~227-272) :
+**Nœud `generate_response`** (lignes ~300-351) :
 
 Pour une requête "info", le prompt construit est :
 ```python
 user_message = (
     f"Question du client : {state['text_input']}\n\n"
     f"Informations disponibles :\n{context}\n\n"  # ← ← ← CONTENU RAG
-    f"Réponds à la question en te basant uniquement sur ces informations."
+    f"RÈGLE ABSOLUE : cite uniquement des produits, prix ou informations "
+    f"EXPLICITEMENT présents dans le contexte ci-dessus. ..."
 )
 ```
 
