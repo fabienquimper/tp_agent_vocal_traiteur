@@ -1,6 +1,8 @@
 # TP 01 — Logs, RGPD & AI Act : audit d'un agent vocal IA
 
-> **Niveau** : intermédiaire | **Durée estimée** : 2 h | **Prérequis** : avoir parcouru l'architecture de l'étape 01
+> **Niveau** : intermédiaire | **Durée estimée** : 2 h à 3 h selon le niveau | **Prérequis** : avoir parcouru l'architecture de l'étape 01
+
+> **Organisation** : les exercices 1 à 5 forment le cœur du TP (recommandés pour tous les niveaux). Les exercices 6 à 8 constituent un approfondissement pour les groupes plus avancés ou disposant de temps supplémentaire.
 
 ---
 
@@ -141,7 +143,7 @@ Voici le flux d'une commande vocale dans notre système. Complétez le tableau e
 
 ### 3.1 Exercice 3 — Consentement et transparence
 
-Ouvrez `ui/index.html` ou `ui/traiteur.html` et regardez l'interface utilisateur.
+Ouvrez `ui/traiteur.html` et regardez l'interface utilisateur (c'est le chat principal de l'agent).
 
 **Q5.** L'utilisateur voit-il une information lui indiquant :
 - Qu'il va interagir avec une IA ?
@@ -218,11 +220,15 @@ Argumentez en vous appuyant sur la notion de "personne raisonnablement informée
 **Q13.** Regardez la réponse système du LLM dans `nodes.py`, ligne ~221 :
 
 ```python
-_RESPONSE_SYSTEM = """Tu es l'assistant vocal du Traiteur Dupont, une entreprise française
-de restauration traiteur à Dijon. Tu réponds en français, avec chaleur et professionnalisme."""
+_RESPONSE_SYSTEM = """Tu es l'assistant vocal du Traiteur Dupont, une entreprise française de restauration traiteur à Dijon.
+Tu réponds en français, avec chaleur et professionnalisme.
+Sois CONCIS : 1 à 3 phrases maximum, car ta réponse sera lue à voix haute.
+N'utilise pas de listes à puces ni de markdown dans ta réponse."""
 ```
 
-L'agent est instruit de répondre "avec chaleur et professionnalisme" — ce qui est naturel.
+Observez ce prompt attentivement. Le développeur a clairement réfléchi à l'expérience vocale :
+concision, pas de markdown, format adapté à la synthèse vocale. Il a pensé au *comment* parler.
+
 Mais si un client demande directement "êtes-vous un robot ?", que devrait répondre l'agent ?
 Y a-t-il une instruction à ce sujet dans le prompt système ?
 
@@ -314,6 +320,7 @@ indiquez : ✅ Conforme | ⚠️ Partiel | ❌ Non conforme | ❓ À vérifier
 - [ ] Réponse prévue si l'utilisateur demande si c'est une IA
 - [ ] Audit trail structuré des décisions LLM (version modèle, timestamp, intent)
 - [ ] Audit trail de la génération catalog.json (hash du menu, modèle, produits extraits)
+- [ ] Déclenchement de `/api/reload-documents` tracé (qui, quand, depuis quelle IP)
 - [ ] Documentation technique du système (art. 11)
 
 ### Bonne pratique générale
