@@ -56,8 +56,10 @@ def _load_structured_documents(data_path: str) -> list[Document]:
         def flush() -> None:
             content = "\n".join(current_lines).strip()
             if content and current_section:
+                # Préfixe de section dans le texte : améliore la similarité sémantique
+                # pour les requêtes du type "quels plats..." ou "horaires..."
                 documents.append(Document(
-                    page_content=content,
+                    page_content=f"[{current_section}]\n{content}",
                     metadata={"source": source, "section": current_section},
                 ))
             current_lines.clear()

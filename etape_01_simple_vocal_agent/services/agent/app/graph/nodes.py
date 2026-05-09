@@ -13,7 +13,7 @@ import json
 import logging
 
 import httpx
-from langchain.schema import HumanMessage, SystemMessage
+from langchain.schema import Document, HumanMessage, SystemMessage
 
 from ..config import settings
 from ..rag.retriever import get_retriever
@@ -198,16 +198,87 @@ def classify_request(state: AgentState) -> dict:
 # Nœud 3 : Recherche RAG dans les fichiers de l'entreprise
 # ═════════════════════════════════════════════════════════════════════════════
 
+# Mots déclenchant un mode "liste complète" → retourner tous les chunks de la section
+_LIST_TRIGGERS = {"plats", "entrées", "entrees", "desserts", "formules", "menu", "carte"}
+_SECTION_KEYWORDS = {
+    "plats":    "PLATS",
+    "entrées":  "ENTRÉES",
+    "entrees":  "ENTRÉES",
+    "desserts": "DESSERTS",
+    "formules": "FORMULES",
+    "menu":     None,   # None = toutes les sections menu (pas horaires/congés)
+    "carte":    None,
+}
+_MENU_SECTIONS = {"PLATS", "ENTRÉES", "DESSERTS", "FORMULES ÉVÉNEMENTIELLES", "INFORMATIONS IMPORTANTES"}
+
+
 def search_rag(state: AgentState) -> dict:
     """
-    Récupère les passages les plus pertinents dans les fichiers .txt
-    (menus.txt, horaires.txt, conges.txt) via ChromaDB + sentence-transformers.
+    Récupère les passages les plus pertinents via ChromaDB + sentence-transformers.
+
+    Deux enrichissements par rapport à la recherche sémantique pure :
+    - Mode "liste généreuse" : si la requête demande une catégorie entière (plats,
+      entrées, desserts, menu…), tous les chunks de cette section sont retournés.
+    - Fallback mots-clés : si des termes spécifiques (noms de plats rares, termes
+      régionaux) sont absents des résultats sémantiques, un scan keyword les ajoute.
     """
     try:
         retriever = get_retriever()
-        docs = retriever.invoke(state["text_input"])
+        query = state["text_input"]
+        query_lower = query.lower()
+        docs = retriever.invoke(query)
+
+        # ── Mode liste généreuse ──────────────────────────────────────────────
+        triggered_section: str | None = "NOT_TRIGGERED"
+        for trigger, section in _SECTION_KEYWORDS.items():
+            if trigger in query_lower:
+                triggered_section = section   # None = toutes sections menu
+                break
+
+        if triggered_section != "NOT_TRIGGERED":
+            try:
+                all_data = retriever.vectorstore._collection.get()
+                existing_texts = {d.page_content for d in docs}
+                for text, meta in zip(all_data["documents"], all_data["metadatas"] or [{}] * len(all_data["documents"])):
+                    if text in existing_texts:
+                        continue
+                    chunk_section = (meta or {}).get("section", "")
+                    if triggered_section is None:
+                        # Toutes sections du menu (exclut horaires et congés)
+                        if chunk_section in _MENU_SECTIONS:
+                            docs.append(Document(page_content=text, metadata=meta or {}))
+                            existing_texts.add(text)
+                    elif triggered_section in chunk_section:
+                        docs.append(Document(page_content=text, metadata=meta or {}))
+                        existing_texts.add(text)
+                logger.info(f"RAG liste généreuse : section={triggered_section or 'menu complet'}")
+            except Exception as list_exc:
+                logger.warning(f"RAG liste généreuse échoué : {list_exc}")
+
+        # ── Fallback mots-clés ────────────────────────────────────────────────
+        # Mots significatifs (>3 chars) absents des résultats : scan direct
+        # strip_punct évite "saucisse?" != "saucisse" lors de la comparaison
+        query_words = {w.lower().strip("?!.,;:\"'()") for w in query.split()
+                       if len(w.strip("?!.,;:\"'()")) > 3}
+        existing_text = " ".join(d.page_content.lower() for d in docs)
+        missing_words = [w for w in query_words if w not in existing_text]
+
+        if missing_words:
+            try:
+                all_data = retriever.vectorstore._collection.get()
+                existing_texts = {d.page_content for d in docs}
+                for text, meta in zip(all_data["documents"], all_data["metadatas"] or [{}] * len(all_data["documents"])):
+                    if text in existing_texts:
+                        continue
+                    if any(w in text.lower() for w in missing_words):
+                        docs.append(Document(page_content=text, metadata=meta or {}))
+                        existing_texts.add(text)
+                logger.info(f"RAG keyword fallback : mots manquants={missing_words}")
+            except Exception as kw_exc:
+                logger.warning(f"RAG keyword fallback échoué : {kw_exc}")
+
         context = "\n\n---\n\n".join(doc.page_content for doc in docs)
-        logger.info(f"RAG : {len(docs)} chunks récupérés")
+        logger.info(f"RAG : {len(docs)} chunks récupérés au total")
         return {"rag_context": context}
     except Exception as exc:
         logger.error(f"Erreur RAG : {exc}")
@@ -220,8 +291,10 @@ def search_rag(state: AgentState) -> dict:
 
 _RESPONSE_SYSTEM = """Tu es l'assistant vocal du Traiteur Dupont, une entreprise française de restauration traiteur à Dijon.
 Tu réponds en français, avec chaleur et professionnalisme.
-Sois CONCIS : 1 à 3 phrases maximum, car ta réponse sera lue à voix haute.
-N'utilise pas de listes à puces ni de markdown dans ta réponse."""
+N'utilise pas de listes à puces ni de markdown dans ta réponse.
+Si le client demande une liste complète (tous les plats, toutes les entrées, tout le menu…), \
+cite TOUS les articles disponibles dans le contexte avec leur prix — sois généreux et exhaustif.
+Sinon, sois concis : 1 à 3 phrases maximum, car ta réponse sera lue à voix haute."""
 
 
 def generate_response(state: AgentState) -> dict:
@@ -257,8 +330,10 @@ def generate_response(state: AgentState) -> dict:
             f"Informations disponibles :\n{context}\n\n"
             f"RÈGLE ABSOLUE : cite uniquement des produits, prix ou informations "
             f"EXPLICITEMENT présents dans le contexte ci-dessus. "
-            f"Si la réponse n'est pas dans ce contexte, dis : "
-            f"'Je n'ai pas cette information, n'hésitez pas à nous appeler.' "
+            f"Si un plat ou produit spécifique mentionné par le client n'apparaît pas dans ce contexte, "
+            f"réponds : 'Ce produit ne figure pas à notre carte actuelle.' "
+            f"Si c'est une question générale (horaires, livraison, allergènes…) sans réponse dans le contexte, "
+            f"dis : 'Je n'ai pas cette information, n'hésitez pas à nous appeler.' "
             f"N'invente aucun produit, prix ou détail."
         )
 
