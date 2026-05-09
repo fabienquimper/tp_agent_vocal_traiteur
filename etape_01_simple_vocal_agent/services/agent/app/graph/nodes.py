@@ -255,8 +255,11 @@ def generate_response(state: AgentState) -> dict:
         user_message = (
             f"Question du client : {state['text_input']}\n\n"
             f"Informations disponibles :\n{context}\n\n"
-            f"Réponds à la question en te basant uniquement sur ces informations. "
-            f"Si l'information n'est pas disponible, dis-le poliment."
+            f"RÈGLE ABSOLUE : cite uniquement des produits, prix ou informations "
+            f"EXPLICITEMENT présents dans le contexte ci-dessus. "
+            f"Si la réponse n'est pas dans ce contexte, dis : "
+            f"'Je n'ai pas cette information, n'hésitez pas à nous appeler.' "
+            f"N'invente aucun produit, prix ou détail."
         )
 
     else:

@@ -2,22 +2,24 @@
 RAG – Chargement, indexation et récupération de documents
 ──────────────────────────────────────────────────────────
 Pipeline :
-  1. Chargement des fichiers .txt depuis data/
-  2. Découpage en chunks (RecursiveCharacterTextSplitter)
-  3. Calcul des embeddings (sentence-transformers, multilingue)
-  4. Stockage dans ChromaDB (persistant sur disque)
-  5. Récupération par similarité sémantique à la requête
+  1. Chargement structuré des fichiers .txt depuis data/
+     - Les sections (--- PLATS ---, --- HORAIRES ---) deviennent des préfixes
+     - Chaque item (séparé par une ligne vide) devient un chunk distinct
+     - Exemple : "[PLATS]\nRougail saucisse des îles et son riz saffrané: 13€"
+  2. Calcul des embeddings (sentence-transformers, multilingue)
+  3. Stockage dans ChromaDB (persistant sur disque)
+  4. Récupération par similarité sémantique à la requête
 
 Le vectorstore est créé au premier démarrage puis rechargé depuis le disque
 lors des démarrages suivants (évite de ré-indexer à chaque redémarrage).
 """
 
 import logging
+import re
 import shutil
 from pathlib import Path
 
-from langchain_community.document_loaders import DirectoryLoader, TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
@@ -28,6 +30,59 @@ logger = logging.getLogger(__name__)
 # ── Singletons ────────────────────────────────────────────────────────────────
 _vectorstore: Chroma | None = None
 _retriever = None
+
+_SECTION_RE = re.compile(r'^---\s*(.+?)\s*---\s*$')
+_SEPARATOR_RE = re.compile(r'^=+\s*$')
+
+
+def _load_structured_documents(data_path: str) -> list[Document]:
+    """
+    Découpage hiérarchique des fichiers .txt.
+
+    Pour chaque fichier, on exploite les marqueurs de section (--- SECTION ---)
+    comme préfixes de contexte, et on crée un chunk par item (délimité par une
+    ligne vide). Cela évite de mélanger des items sans rapport dans le même
+    vecteur et améliore significativement la précision de la recherche.
+    """
+    documents: list[Document] = []
+
+    for txt_file in sorted(Path(data_path).glob("**/*.txt")):
+        text = txt_file.read_text(encoding="utf-8")
+        source = str(txt_file)
+        current_section: str | None = None
+        current_lines: list[str] = []
+        count_before = len(documents)
+
+        def flush() -> None:
+            content = "\n".join(current_lines).strip()
+            if content and current_section:
+                documents.append(Document(
+                    page_content=content,
+                    metadata={"source": source, "section": current_section},
+                ))
+            current_lines.clear()
+
+        for line in text.splitlines():
+            stripped = line.strip()
+            if _SEPARATOR_RE.match(stripped):
+                continue
+            m = _SECTION_RE.match(stripped)
+            if m:
+                flush()
+                current_section = m.group(1).strip()
+                continue
+            if not stripped:
+                flush()
+                continue
+            if current_section is None:
+                # Titre du fichier (avant la première section) — ignoré
+                continue
+            current_lines.append(line)
+
+        flush()
+        logger.info(f"{txt_file.name} → {len(documents) - count_before} chunks")
+
+    return documents
 
 
 def _get_embeddings() -> HuggingFaceEmbeddings:
@@ -77,23 +132,8 @@ def initialize_vectorstore(force_reload: bool = False) -> Chroma:
     # ── Indexation depuis les fichiers sources ────────────────────────────────
     logger.info(f"Indexation des documents depuis {data_path}...")
 
-    loader = DirectoryLoader(
-        data_path,
-        glob="**/*.txt",
-        loader_cls=TextLoader,
-        loader_kwargs={"encoding": "utf-8"},
-        show_progress=True,
-    )
-    documents = loader.load()
-    logger.info(f"{len(documents)} fichiers chargés")
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap,
-        separators=["\n\n", "\n", ". ", " ", ""],
-    )
-    chunks = splitter.split_documents(documents)
-    logger.info(f"{len(chunks)} chunks créés")
+    chunks = _load_structured_documents(data_path)
+    logger.info(f"{len(chunks)} chunks créés au total")
 
     _vectorstore = Chroma.from_documents(
         documents=chunks,

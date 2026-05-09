@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Makefile – Traiteur Dupont – Agent Vocal IA
 # ─────────────────────────────────────────────────────────────────────────────
-.PHONY: help build up down logs init-ollama reload-docs test clean dev up-hf build-hf up-groq build-groq
+.PHONY: help build up down logs init-ollama reload-docs test clean dev up-hf build-hf up-groq build-groq build-groq-nocache
 
 AGENT_URL = http://localhost:8000
 
@@ -167,6 +167,12 @@ COMPOSE_GROQ = docker compose -f docker-compose.yml -f docker-compose.groq.yml
 ## build-groq : Construit les images pour le mode Groq
 build-groq:
 	$(COMPOSE_GROQ) build stt agent
+
+## build-groq-nocache : Reconstruit UNIQUEMENT l'agent sans cache (Groq mode)
+## Utile après modification du code Python sans toucher aux deps ni au modèle Whisper
+## Plus léger que build-nocache : ne re-télécharge pas Whisper (~1 GB), ne plante pas WSL
+build-groq-nocache:
+	$(COMPOSE_GROQ) build --no-cache agent
 
 ## up-groq : Démarre les services en mode Groq (sans Ollama local)
 ## Usage : make up-groq GROQ_API_KEY=gsk_xxxxxxxxxxxx  (ou via .env)

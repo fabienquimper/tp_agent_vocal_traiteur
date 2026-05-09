@@ -89,6 +89,7 @@ services:
       - TTS_SERVICE_URL=http://host.docker.internal:8002
       - LLM_MODEL=${LLM_MODEL:-mistral}
       - ORDER_COMPLEXITY_THRESHOLD=${ORDER_COMPLEXITY_THRESHOLD:-6}
+      - RAG_TOP_K=${RAG_TOP_K:-5}
       - DATA_DIR=/app/data
       - ORDERS_DIR=/app/orders
       - CHROMA_DIR=/app/chroma

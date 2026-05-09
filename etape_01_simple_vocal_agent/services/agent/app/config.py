@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # ── RAG ────────────────────────────────────────────────────────────────────
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
-    rag_top_k: int = 3          # Nombre de chunks récupérés
+    rag_top_k: int = 5          # Nombre de chunks récupérés
     chunk_size: int = 500
     chunk_overlap: int = 50
 
