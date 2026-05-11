@@ -99,7 +99,9 @@ def transcribe_audio(state: AgentState) -> dict:
     """
     if not state.get("audio_bytes"):
         # Entrée texte directe : rien à transcrire, on conserve text_input tel quel
-        return {"text_input": state.get("text_input", "")}
+        text = state.get("text_input", "")
+        logger.info(f"Texte direct : '{text}'")
+        return {"text_input": text}
 
     try:
         with httpx.Client(timeout=60) as client:

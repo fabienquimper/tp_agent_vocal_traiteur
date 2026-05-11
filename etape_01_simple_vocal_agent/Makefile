@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Makefile – Traiteur Dupont – Agent Vocal IA
 # ─────────────────────────────────────────────────────────────────────────────
-.PHONY: help build up down logs init-ollama reload-docs test clean dev up-hf build-hf up-groq build-groq build-groq-nocache
+.PHONY: help build up down logs init-ollama reload-docs test clean dev up-hf build-hf up-groq build-groq build-groq-nocache logs-agent logs-agent-clean logs-transcription logs-rgpd
 
 AGENT_URL = http://localhost:8000
 
@@ -63,6 +63,18 @@ logs:
 ## logs-agent : Logs de l'agent uniquement
 logs-agent:
 	$(COMPOSE) logs -f agent
+
+## logs-agent-clean : Logs de l'agent sans le bruit des healthchecks
+logs-agent-clean:
+	docker logs -f traiteur_agent 2>&1 | grep -v "/health"
+
+## logs-transcription : Transcriptions audio ET saisies texte directes (données RGPD)
+logs-transcription:
+	docker logs traiteur_agent 2>&1 | grep -iE "Transcription|Texte direct" || true
+
+## logs-rgpd : Toutes les données personnelles loggées (transcription, nom client, intent)
+logs-rgpd:
+	docker logs traiteur_agent 2>&1 | grep -iE "Transcription|Commande finalis|Intent=|items=" || true
 
 ## ─── Initialisation ──────────────────────────────────────────────────────────
 
