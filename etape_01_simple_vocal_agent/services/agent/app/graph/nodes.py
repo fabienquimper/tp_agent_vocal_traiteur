@@ -15,7 +15,7 @@ import logging
 import httpx
 from langchain.schema import Document, HumanMessage, SystemMessage
 
-from ..config import settings
+from ..config import settings, mask_secret
 from ..rag.retriever import get_retriever
 from .state import AgentState
 
@@ -30,7 +30,7 @@ class _Resp:
 
 
 def _build_llm():
-    """Crée le LLM selon LLM_PROVIDER : Ollama local, HuggingFace ou Groq."""
+    """Crée le LLM selon LLM_PROVIDER : Ollama local, HuggingFace, Groq ou Mistral."""
 
     if settings.llm_provider == "huggingface":
         from huggingface_hub import InferenceClient
@@ -48,7 +48,7 @@ def _build_llm():
                 r.content = response.choices[0].message.content
                 return r
 
-        logger.info(f"[LLM] Provider HuggingFace – modèle : {settings.hf_llm_model}")
+        logger.info(f"[LLM] Provider HuggingFace – modèle : {settings.hf_llm_model} | token : {mask_secret(settings.hf_api_token)}")
         return _HFChatLLM()
 
     if settings.llm_provider == "groq":
@@ -72,8 +72,32 @@ def _build_llm():
                 r.content = response.choices[0].message.content
                 return r
 
-        logger.info(f"[LLM] Provider Groq – modèle : {settings.groq_llm_model}")
+        logger.info(f"[LLM] Provider Groq – modèle : {settings.groq_llm_model} | clé : {mask_secret(settings.groq_api_key)}")
         return _GroqChatLLM()
+
+    if settings.llm_provider == "mistral":
+        from mistralai import Mistral
+        client = Mistral(api_key=settings.mistral_api_key or None)
+        temperature = settings.llm_temperature
+
+        class _MistralChatLLM:
+            def invoke(self, messages):
+                mistral_msgs = [
+                    {"role": "system" if isinstance(m, SystemMessage) else "user", "content": m.content}
+                    for m in messages if isinstance(m, (SystemMessage, HumanMessage))
+                ]
+                response = client.chat.complete(
+                    model=settings.mistral_llm_model,
+                    messages=mistral_msgs,
+                    max_tokens=512,
+                    temperature=temperature,
+                )
+                r = _Resp()
+                r.content = response.choices[0].message.content
+                return r
+
+        logger.info(f"[LLM] Provider Mistral – modèle : {settings.mistral_llm_model} | clé : {mask_secret(settings.mistral_api_key)}")
+        return _MistralChatLLM()
 
     # Provider local via Ollama (défaut)
     from langchain_ollama import ChatOllama

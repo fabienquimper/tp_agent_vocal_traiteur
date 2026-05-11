@@ -25,6 +25,15 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _mask(value: str, visible: int = 4) -> str:
+    if not value:
+        return "(non défini)"
+    if len(value) <= visible * 2:
+        return "*" * len(value)
+    return f"{value[:visible]}...{value[-visible:]}"
+
+
 # ── Configuration ──────────────────────────────────────────────────────────────
 STT_PROVIDER   = os.getenv("STT_PROVIDER", "local")   # "local" | "huggingface" | "groq"
 HF_API_TOKEN   = os.getenv("HF_API_TOKEN") or os.getenv("HF_HUB_TOKEN") or os.getenv("HF_TOKEN", "")
@@ -55,13 +64,13 @@ async def lifespan(app: FastAPI):
         if not GROQ_API_KEY:
             logger.warning("[STT] GROQ_API_KEY non défini – les appels Groq échoueront !")
         _groq_client = Groq(api_key=GROQ_API_KEY or None)
-        logger.info(f"[STT] Mode Groq – modèle : {GROQ_STT_MODEL} (audio envoyé à Groq)")
+        logger.info(f"[STT] Mode Groq – modèle : {GROQ_STT_MODEL} | clé : {_mask(GROQ_API_KEY)} (audio envoyé à Groq)")
     else:  # huggingface
         from huggingface_hub import InferenceClient
         if not HF_API_TOKEN:
             logger.warning("[STT] HF_API_TOKEN non défini – les appels HF échoueront !")
         _hf_client = InferenceClient(model=HF_STT_MODEL, token=HF_API_TOKEN or None)
-        logger.info(f"[STT] Mode HuggingFace – modèle : {HF_STT_MODEL}")
+        logger.info(f"[STT] Mode HuggingFace – modèle : {HF_STT_MODEL} | token : {_mask(HF_API_TOKEN)}")
     yield
 
 

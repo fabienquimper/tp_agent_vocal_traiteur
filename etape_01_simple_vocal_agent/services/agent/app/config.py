@@ -9,6 +9,15 @@ from pydantic import Field, AliasChoices
 from pydantic_settings import BaseSettings
 
 
+def mask_secret(value: str, visible: int = 4) -> str:
+    """Retourne la valeur masquée pour les logs (ex: gsk_a1h6...oux)."""
+    if not value:
+        return "(non défini)"
+    if len(value) <= visible * 2:
+        return "*" * len(value)
+    return f"{value[:visible]}...{value[-visible:]}"
+
+
 class Settings(BaseSettings):
     # ── Services externes ──────────────────────────────────────────────────────
     ollama_base_url: str = "http://ollama:11434"
@@ -16,7 +25,7 @@ class Settings(BaseSettings):
     tts_service_url: str = "http://tts:8002"
 
     # ── Modèle LLM ─────────────────────────────────────────────────────────────
-    llm_provider: str = "local"        # "local" (Ollama) | "huggingface" | "groq"
+    llm_provider: str = "local"        # "local" (Ollama) | "huggingface" | "groq" | "mistral"
     llm_model: str = "mistral"         # Utilisé uniquement si llm_provider=local
     llm_temperature: float = 0.1       # Faible pour des réponses déterministes
 
@@ -34,6 +43,13 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("groq_api_key", "GROQ_API_KEY"),
     )
     groq_llm_model: str = "llama-3.1-8b-instant"
+
+    # ── Mistral (si llm_provider="mistral") ────────────────────────────────────
+    mistral_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("mistral_api_key", "MISTRAL_API_KEY", "MISTRALAI_API_KEY"),
+    )
+    mistral_llm_model: str = "mistral-small-latest"
 
     # ── Logique métier ─────────────────────────────────────────────────────────
     # Au-delà de ce seuil (total d'unités), la commande est "complexe"

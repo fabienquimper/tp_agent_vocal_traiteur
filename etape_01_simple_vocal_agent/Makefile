@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Makefile – Traiteur Dupont – Agent Vocal IA
 # ─────────────────────────────────────────────────────────────────────────────
-.PHONY: help build up down logs init-ollama reload-docs test clean dev up-hf build-hf up-groq build-groq build-groq-nocache logs-agent logs-agent-clean logs-transcription logs-rgpd
+.PHONY: help build up down logs init-ollama reload-docs test clean dev up-hf build-hf up-groq build-groq build-groq-nocache up-mistral build-mistral build-mistral-nocache logs-agent logs-agent-clean logs-transcription logs-rgpd
 
 AGENT_URL = http://localhost:8000
 
@@ -207,6 +207,39 @@ up-groq:
 	@echo "  TTS   → http://localhost:8002  (piper local)"
 	@echo ""
 	@echo "Note : Groq est tres rapide (~1-3 s). Audio et texte passes par Groq."
+
+## ─── Mode Mistral (LLM via API Mistral AI) ───────────────────────────────────
+COMPOSE_MISTRAL = docker compose -f docker-compose.yml -f docker-compose.mistral.yml
+
+## build-mistral : Construit les images pour le mode Mistral
+build-mistral:
+	$(COMPOSE_MISTRAL) build stt agent
+
+## build-mistral-nocache : Reconstruit UNIQUEMENT l'agent sans cache (Mistral mode)
+build-mistral-nocache:
+	$(COMPOSE_MISTRAL) build --no-cache agent
+
+## up-mistral : Démarre les services en mode Mistral (LLM API + STT local)
+## Usage : make up-mistral MISTRAL_API_KEY=...  (ou via .env)
+up-mistral:
+	$(eval _MISTRAL_KEY := $(or $(MISTRAL_API_KEY),$(MISTRALAI_API_KEY),$(shell grep -E '^(MISTRAL_API_KEY|MISTRALAI_API_KEY)=' .env 2>/dev/null | head -1 | cut -d= -f2-)))
+	@if [ -z "$(_MISTRAL_KEY)" ]; then \
+		echo "ERREUR : token Mistral introuvable."; \
+		echo "  Option 1 : make up-mistral MISTRAL_API_KEY=..."; \
+		echo "  Option 2 : ajouter MISTRAL_API_KEY=... dans votre fichier .env"; \
+		echo "Token sur : https://console.mistral.ai/api-keys"; \
+		exit 1; \
+	fi
+	@echo "Mode Mistral (LLM mistral-small-latest + STT Whisper local)"
+	MISTRAL_API_KEY=$(_MISTRAL_KEY) $(COMPOSE_MISTRAL) up -d stt tts agent ui
+	@echo ""
+	@echo "Services demarres (sans Ollama local) :"
+	@echo "  UI    → http://localhost:3000"
+	@echo "  Agent → http://localhost:8000"
+	@echo "  STT   → http://localhost:8001  (Whisper local)"
+	@echo "  TTS   → http://localhost:8002  (piper local)"
+	@echo ""
+	@echo "Note : STT reste local (Mistral n'a pas d'API STT). Seul le LLM passe par Mistral."
 
 ## ─── Développement ───────────────────────────────────────────────────────────
 

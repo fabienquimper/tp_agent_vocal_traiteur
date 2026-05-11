@@ -413,6 +413,11 @@ def _classify_error(exc: Exception) -> tuple[str, str]:
                 "Le quota Groq est temporairement épuisé.",
                 "Attendez quelques minutes (quota par minute) ou vérifiez console.groq.com.",
             )
+        if provider == "mistral":
+            return (
+                "Le quota Mistral est épuisé.",
+                "Vérifiez votre plan sur console.mistral.ai ou attendez la prochaine période de facturation.",
+            )
         return (
             "Le quota mensuel de l'API HuggingFace est épuisé.",
             "Essayez Groq (gratuit, illimité) : make up-groq GROQ_API_KEY=gsk_xxx — token sur console.groq.com/keys.",
@@ -424,6 +429,11 @@ def _classify_error(exc: Exception) -> tuple[str, str]:
                 "Le token Groq est invalide ou expiré.",
                 "Vérifiez GROQ_API_KEY dans votre fichier .env — token gratuit sur console.groq.com/keys.",
             )
+        if provider == "mistral":
+            return (
+                "Le token Mistral est invalide ou expiré.",
+                "Vérifiez MISTRAL_API_KEY dans votre fichier .env — token sur console.mistral.ai/api-keys.",
+            )
         return (
             "Le token HuggingFace est invalide ou expiré.",
             "Vérifiez HF_API_TOKEN dans votre fichier .env — token gratuit sur huggingface.co/settings/tokens.",
@@ -434,6 +444,11 @@ def _classify_error(exc: Exception) -> tuple[str, str]:
             return (
                 "Le modèle Groq est introuvable.",
                 "Vérifiez GROQ_LLM_MODEL dans .env. Modèles disponibles : llama-3.1-8b-instant, llama-3.3-70b-versatile.",
+            )
+        if provider == "mistral":
+            return (
+                "Le modèle Mistral est introuvable.",
+                "Vérifiez MISTRAL_LLM_MODEL dans .env. Modèles disponibles : mistral-small-latest, mistral-large-latest.",
             )
         return (
             "Le modèle IA est introuvable sur HuggingFace.",
@@ -957,6 +972,21 @@ async def debug_status():
                 "fix": "Ajoutez GROQ_API_KEY=gsk_xxx dans .env\nToken gratuit : https://console.groq.com/keys",
             })
 
+    # ── Mistral token (mode Mistral) ──────────────────────────────────────────
+    if cfg.llm_provider == "mistral":
+        token_ok = bool(cfg.mistral_api_key)
+        checks["mistral_token"] = {
+            "status": "ok" if token_ok else "error",
+            "token_set": token_ok,
+            "llm_model": cfg.mistral_llm_model,
+        }
+        if not token_ok:
+            suggestions.append({
+                "severity": "error", "service": "Mistral",
+                "message": "MISTRAL_API_KEY absent — les appels LLM via Mistral échoueront.",
+                "fix": "Ajoutez MISTRAL_API_KEY=... dans .env\nToken sur https://console.mistral.ai/api-keys",
+            })
+
     statuses = [v.get("status") for v in checks.values()]
     overall = "error" if "error" in statuses else ("degraded" if "warn" in statuses else "ok")
 
@@ -969,6 +999,7 @@ async def debug_status():
             "llm_model": (
                 cfg.hf_llm_model if cfg.llm_provider == "huggingface"
                 else cfg.groq_llm_model if cfg.llm_provider == "groq"
+                else cfg.mistral_llm_model if cfg.llm_provider == "mistral"
                 else cfg.llm_model
             ),
             "stt_url": cfg.stt_service_url,

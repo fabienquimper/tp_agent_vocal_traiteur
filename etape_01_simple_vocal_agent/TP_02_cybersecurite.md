@@ -183,7 +183,7 @@ dans le même espace — le texte — sans séparation native entre les deux.
 
 Notre agent a deux nœuds LLM. Regardons leurs prompts dans `services/agent/app/graph/nodes.py`.
 
-**Nœud `classify_request`** (lignes ~147-193) :
+**Nœud `classify_request`** (lignes ~173-220) :
 
 ```python
 messages = [
@@ -192,7 +192,7 @@ messages = [
 ]
 ```
 
-**Nœud `generate_response`** (lignes ~300-351) :
+**Nœud `generate_response`** (lignes ~318-380) :
 
 Pour une requête "info", le prompt construit est :
 ```python

@@ -84,7 +84,8 @@ Le seuil est configurable via `ORDER_COMPLEXITY_THRESHOLD` dans `.env`.
 
 | Votre situation | Mode recommandé |
 |---|---|
-| PC modeste, WSL2, pas de GPU → **choix par défaut** | [**Mode Groq**](#option-a--mode-groq-recommandé) — API cloud gratuite, ~1–3 s/réponse |
+| PC modeste, WSL2, pas de GPU → **choix par défaut** | [**Mode Groq**](#option-a--mode-groq-recommandé) — LLM + STT cloud gratuits, ~1–3 s/réponse |
+| PC modeste, contrainte RGPD (données en France) | [**Mode Mistral**](#mode-mistral-llm-cloud-stt-local) — LLM via Mistral AI (Paris), STT local |
 | PC puissant avec GPU NVIDIA, usage hors-ligne | [Mode local Ollama](#option-b--mode-local-ollama) — tout reste sur votre machine |
 | Token HuggingFace déjà disponible | [Mode HuggingFace](#mode-huggingface-apis-distantes) — en bas de page |
 
@@ -284,6 +285,10 @@ make clean               # Tout supprimer (volumes inclus)
 # Mode Groq (LLM + STT via API cloud)
 make up-groq             # Démarrer en mode Groq (GROQ_API_KEY requis dans .env)
 make build-groq-nocache  # Rebuild agent uniquement sans cache (après modif Python)
+
+# Mode Mistral (LLM cloud + STT local)
+make up-mistral          # Démarrer en mode Mistral (MISTRAL_API_KEY requis dans .env)
+make build-mistral-nocache  # Rebuild agent uniquement sans cache (après modif Python)
 ```
 
 ---
@@ -485,12 +490,52 @@ GROQ_LLM_MODEL=llama-3.3-70b-versatile   # plus précis, recommandé
 
 ### Comparaison des modes
 
-| Critère            | Mode local (Ollama)        | Mode HuggingFace           | Mode Groq                  |
-|--------------------|----------------------------|----------------------------|----------------------------|
-| Confidentialité    | 100 % (aucune donnée sortante) | Audio/texte envoyés à HF | Audio/texte envoyés à Groq |
-| Vitesse (sans GPU) | Lent (30–120 s/requête LLM)| ~2–5 s                    | **~1–3 s**                 |
-| Coût               | Gratuit                    | Gratuit (quota mensuel)    | Gratuit (quota/minute)     |
-| Disponibilité      | Hors-ligne OK              | Nécessite Internet         | Nécessite Internet         |
+| Critère            | Mode local (Ollama)        | Mode HuggingFace           | Mode Groq                  | Mode Mistral               |
+|--------------------|----------------------------|----------------------------|----------------------------|----------------------------|
+| Confidentialité    | 100 % (aucune donnée sortante) | Audio/texte envoyés à HF | Audio/texte envoyés à Groq (USA) | Texte LLM envoyé à Mistral AI (France) |
+| Vitesse (sans GPU) | Lent (30–120 s/requête LLM)| ~2–5 s                    | **~1–3 s**                 | ~1–3 s (STT local ~5–15 s) |
+| Coût               | Gratuit                    | Gratuit (quota mensuel)    | Gratuit (quota/minute)     | Payant (essai gratuit)     |
+| RGPD               | Traitement 100 % local     | Transfert hors UE (HF USA) | Transfert hors UE (Groq USA) | **Intra-UE** (Mistral Paris) |
+| Disponibilité      | Hors-ligne OK              | Nécessite Internet         | Nécessite Internet         | Nécessite Internet         |
+
+---
+
+## Mode Mistral (LLM cloud, STT local)
+
+Mistral AI est une entreprise française. Son API propose des LLM performants avec les données traitées en France (avantage RGPD). Le STT reste local — Mistral n'a pas d'API Whisper.
+
+| Service | Modèle |
+|---------|--------|
+| STT     | Whisper local (inchangé) |
+| LLM     | `mistral-small-latest` (ou `mistral-large-latest`) |
+| TTS     | piper local (inchangé) |
+
+### 1. Obtenir une clé Mistral
+
+1. Créer un compte sur [console.mistral.ai](https://console.mistral.ai)
+2. Générer une API Key dans **API Keys**
+3. L'ajouter dans `.env` : `MISTRAL_API_KEY=...`
+
+### 2. Démarrer en mode Mistral
+
+```bash
+# Première fois ou après changement des dépendances :
+make build-mistral && make up-mistral
+make reload-docs
+
+# Après modification du code Python seulement (plus rapide) :
+make build-mistral-nocache && make up-mistral
+```
+
+> **Note** : le STT tourne toujours en local. Le premier démarrage télécharge Whisper (~250 Mo) si ce n'est pas déjà fait.
+
+### 3. Changer de modèle LLM
+
+Dans `.env` :
+```
+MISTRAL_LLM_MODEL=mistral-small-latest   # rapide, bon rapport qualité/prix
+# MISTRAL_LLM_MODEL=mistral-large-latest # plus précis, plus cher
+```
 
 ---
 

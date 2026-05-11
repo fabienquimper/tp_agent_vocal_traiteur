@@ -91,7 +91,7 @@ qui contient (ou pourrait contenir) une donnée personnelle :
 
 **Questions :**
 
-**Q1.** Dans `nodes.py`, ligne ~115, que logue le nœud de transcription ?
+**Q1.** Dans `nodes.py`, ligne ~141, que logue le nœud de transcription ?
 Est-ce une donnée personnelle ? Pourquoi ?
 
 ```python
@@ -107,12 +107,13 @@ Quelles données personnelles apparaissent dans ce log ?
 Ces mêmes données transitent-elles par les logs ?
 
 **Q4.** Le service STT (`stt/app.py`) logue-t-il le contenu de ce que dit l'utilisateur ?
-Comparez les trois modes de déploiement (local Whisper, HuggingFace, Groq) — la réponse
+Comparez les quatre modes de déploiement (local Whisper, HuggingFace, Groq, Mistral) — la réponse
 n'est pas la même pour tous.
 
-> **Note** : le projet supporte plusieurs providers STT selon la puissance du poste.
+> **Note** : le projet supporte plusieurs providers selon la puissance du poste.
 > En mode local, le contenu n'est pas loggué. En mode cloud (HF/Groq), observez ce que
-> font les lignes ~115 et ~125. Ce décalage de comportement selon le provider est un
+> font les lignes ~124 et ~134. En mode Mistral, seul le LLM passe par le cloud — la
+> transcription vocale (STT) reste locale. Ce décalage de comportement selon le provider est un
 > vrai cas d'école en contexte on-premise vs. cloud.
 
 ---
@@ -222,7 +223,7 @@ L'article 50 de l'AI Act dispose :
 Est-ce suffisant selon vous pour satisfaire l'obligation d'information ?
 Argumentez en vous appuyant sur la notion de "personne raisonnablement informée".
 
-**Q13.** Regardez la réponse système du LLM dans `nodes.py`, ligne ~292 :
+**Q13.** Regardez la réponse système du LLM dans `nodes.py`, ligne ~318 :
 
 ```python
 _RESPONSE_SYSTEM = """Tu es l'assistant vocal du Traiteur Dupont, une entreprise française de restauration traiteur à Dijon.
@@ -246,7 +247,7 @@ Y a-t-il une instruction à ce sujet dans le prompt système ?
 L'AI Act exige que les systèmes d'IA maintiennent des journaux permettant de comprendre
 les décisions automatisées prises.
 
-Regardez les logs de classification dans `nodes.py`, ligne ~189 :
+Regardez les logs de classification dans `nodes.py`, ligne ~215 :
 
 ```python
 logger.info(f"Intent='{intent}' topic='{topic}' items={order_items}")
@@ -284,7 +285,7 @@ class PaymentSimulateRequest(BaseModel):
     cvv: str = ""
 ```
 
-Et l'utilisation, lignes ~667-669 :
+Et l'utilisation, lignes ~754-756 :
 
 ```python
 card = re.sub(r'[\s\-]', '', request.card_number)
