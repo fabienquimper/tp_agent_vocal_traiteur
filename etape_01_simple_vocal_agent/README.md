@@ -78,6 +78,8 @@ Le seuil est configurable via `ORDER_COMPLEXITY_THRESHOLD` dans `.env`.
 - Docker Engine ≥ 24 avec Docker Compose
 - 4 Go de RAM minimum (8 Go recommandés pour le mode local Ollama)
 
+> **Windows sans WSL2** : `make` n'est pas disponible dans PowerShell. Utilisez les commandes `docker compose` équivalentes décrites dans la section [Lancer depuis PowerShell (Windows)](#lancer-depuis-powershell-windows).
+
 ### Quel mode choisir ?
 
 > **Lisez ceci avant de lancer la moindre commande.**
@@ -138,6 +140,104 @@ make init-all   # build + démarrage + téléchargement Mistral 7B (~4 Go)
 > Premier démarrage : 10–30 min selon votre connexion. À ne lancer qu'une fois.
 
 Ouvrir [http://localhost:3000](http://localhost:3000)
+
+---
+
+### Lancer depuis PowerShell (Windows, sans WSL2)
+
+`make` n'est pas disponible nativement dans PowerShell. Utilisez directement `docker compose` avec les équivalents ci-dessous. [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) doit être installé et en cours d'exécution.
+
+> **Conseil** : plutôt que de passer la clé en variable de session, ajoutez-la dans le fichier `.env` (copiez `.env.example` en `.env`). Les commandes `docker compose` lisent automatiquement ce fichier.
+
+#### Mode Groq (recommandé)
+
+```powershell
+# Variables d'environnement (valables pour la session PowerShell en cours)
+$env:GROQ_API_KEY = "gsk_xxxxxxxxxxxx"
+
+# Première fois — construire les images (télécharge Whisper ~250 Mo)
+docker compose -f docker-compose.yml -f docker-compose.groq.yml build stt agent
+
+# Démarrer les services
+docker compose -f docker-compose.yml -f docker-compose.groq.yml up -d stt tts agent ui
+
+# Indexer les documents du RAG (obligatoire au premier lancement)
+Invoke-RestMethod -Method Post http://localhost:8000/api/reload-documents
+```
+
+Ouvrir [http://localhost:3000](http://localhost:3000)
+
+#### Mode Mistral
+
+```powershell
+$env:MISTRAL_API_KEY = "votre_clé_mistral"
+
+docker compose -f docker-compose.yml -f docker-compose.mistral.yml build stt agent
+docker compose -f docker-compose.yml -f docker-compose.mistral.yml up -d stt tts agent ui
+Invoke-RestMethod -Method Post http://localhost:8000/api/reload-documents
+```
+
+#### Mode HuggingFace
+
+```powershell
+$env:HF_API_TOKEN = "hf_xxxxxxxxxxxx"
+
+docker compose -f docker-compose.yml -f docker-compose.hf.yml up -d stt tts agent ui
+Invoke-RestMethod -Method Post http://localhost:8000/api/reload-documents
+```
+
+#### Mode local Ollama
+
+```powershell
+docker compose up -d
+
+# Attendre ~15 s le démarrage d'Ollama, puis télécharger le modèle (~4 Go)
+docker exec traiteur_ollama ollama pull mistral
+Invoke-RestMethod -Method Post http://localhost:8000/api/reload-documents
+```
+
+#### Commandes du quotidien
+
+```powershell
+# Logs en temps réel (tous les services)
+docker compose logs -f
+
+# Logs de l'agent uniquement
+docker compose logs -f agent
+
+# Arrêter tous les services
+docker compose down
+
+# Supprimer les conteneurs et volumes (ATTENTION : supprime ChromaDB)
+docker compose down -v
+
+# Vérifier l'état de chaque service
+@{
+    Ollama = "http://localhost:11434/api/tags"
+    STT    = "http://localhost:8001/health"
+    TTS    = "http://localhost:8002/health"
+    Agent  = "http://localhost:8000/health"
+    UI     = "http://localhost:3000"
+}.GetEnumerator() | ForEach-Object {
+    try   { Invoke-RestMethod $_.Value | Out-Null; Write-Host "$($_.Key) : OK" }
+    catch { Write-Host "$($_.Key) : KO" }
+}
+
+# Re-indexer les documents après modification de data/
+Invoke-RestMethod -Method Post http://localhost:8000/api/reload-documents
+```
+
+#### Rebuild après modification du code Python (sans re-télécharger Whisper)
+
+```powershell
+# Groq
+docker compose -f docker-compose.yml -f docker-compose.groq.yml build --no-cache agent
+docker compose -f docker-compose.yml -f docker-compose.groq.yml up -d stt tts agent ui
+
+# Mistral
+docker compose -f docker-compose.yml -f docker-compose.mistral.yml build --no-cache agent
+docker compose -f docker-compose.yml -f docker-compose.mistral.yml up -d stt tts agent ui
+```
 
 ---
 
