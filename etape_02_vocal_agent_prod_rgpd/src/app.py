@@ -36,7 +36,6 @@ import httpx
 import yaml
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -98,10 +97,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir l'UI (répertoire monté au build Docker)
+# UI — le répertoire est monté à / EN FIN DE FICHIER (après toutes les routes API)
+# afin que les routes /api/* et /health prennent toujours la priorité.
 _UI_DIR = Path(__file__).parent.parent / "ui"
-if _UI_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(_UI_DIR)), name="static")
 
 
 # ── Gestion des sessions ───────────────────────────────────────────────────────
@@ -540,22 +538,6 @@ def health():
     return {"status": "ok", "service": "agent"}
 
 
-@app.get("/")
-async def root():
-    index = _UI_DIR / "traiteur.html"
-    if index.exists():
-        return FileResponse(str(index))
-    return {"status": "ok", "message": "Traiteur Dupont Agent v2"}
-
-
-@app.get("/status.html")
-async def status_page():
-    status_file = _UI_DIR / "status.html"
-    if status_file.exists():
-        return FileResponse(str(status_file))
-    raise HTTPException(status_code=404, detail="Page not found")
-
-
 @app.post("/api/voice", response_model=AgentResponse)
 async def process_voice(
     audio: UploadFile = File(...),
@@ -676,3 +658,12 @@ async def get_status():
                 checks["ollama"] = {"status": "error", "error": str(exc)[:100]}
 
     return {"status": "ok", "checks": checks}
+
+
+# ── UI statique ────────────────────────────────────────────────────────────────
+# Monté EN DERNIER : les routes /api/*, /health déclarées au-dessus ont toujours
+# la priorité. StaticFiles gère le reste : /, /index.html (chatbot), /traiteur.html
+# (dashboard), /status.html, /style.css, /app.js, etc.
+# html=True → sert automatiquement index.html pour les requêtes sur /
+if _UI_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(_UI_DIR), html=True), name="ui")
