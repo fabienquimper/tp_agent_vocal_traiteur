@@ -26,6 +26,7 @@ import random
 import re
 import time
 import uuid
+from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -125,6 +126,12 @@ class OrderSession:
 _sessions: dict[str, OrderSession] = {}
 _SESSION_TTL = timedelta(minutes=30)
 
+# Historique conversationnel léger pour les questions "info" (sans commande en cours).
+# Permet au LLM d'interpréter les questions de suivi ("Et le rougail ?", "Pas d'autres ?").
+# 6 entrées = 3 tours user+assistant conservés par session.
+_info_contexts: dict[str, deque] = {}
+_INFO_CTX_SIZE = 6
+
 
 def _get_session(session_id: str) -> Optional[OrderSession]:
     session = _sessions.get(session_id)
@@ -218,21 +225,28 @@ async def _llm_classify(text: str) -> dict:
         return {"intent": "autre", "order_items": []}
 
 
-async def _llm_respond(intent: str, text: str, order_items: list) -> str:
-    """Generate a response text based on intent."""
+async def _llm_respond(intent: str, text: str, order_items: list, history: list[dict] | None = None) -> str:
+    """Generate a response text based on intent.
+
+    history: turns précédents [{"role": "user", ...}, {"role": "assistant", ...}, ...]
+             Passé uniquement pour intent="info" afin de gérer les questions de suivi.
+    """
     t0 = time.perf_counter()
     if intent in ("commande_simple", "commande_complexe"):
         prompt = _render(_PROMPTS["respond_order"], menu=MENU_TEXT)
         items_str = ", ".join(f"{i['quantite']}× {i['produit']}" for i in order_items)
         user_msg = f"Le client souhaite commander : {items_str}. Confirme et demande nom, prénom, téléphone."
+        messages = [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}]
     elif intent == "info":
         prompt = _render(_PROMPTS["respond_info"], menu=MENU_TEXT)
-        user_msg = text
+        messages = [{"role": "system", "content": prompt}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": text})
     else:
         prompt = _PROMPTS["respond_other"]
-        user_msg = text
+        messages = [{"role": "system", "content": prompt}, {"role": "user", "content": text}]
 
-    messages = [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}]
     try:
         response = await _llm_provider.chat(messages, max_tokens=512)
         duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -423,7 +437,11 @@ async def _process_request(
                 intent_raw = data.get("intent", "autre")
 
                 if intent_raw == "info":
-                    response_text = await _llm_respond("info", text_input, [])
+                    history = list(_info_contexts.get(session_id, []))
+                    response_text = await _llm_respond("info", text_input, [], history=history)
+                    ctx = _info_contexts.setdefault(session_id, deque(maxlen=_INFO_CTX_SIZE))
+                    ctx.append({"role": "user", "content": text_input})
+                    ctx.append({"role": "assistant", "content": response_text})
                     reminder = {
                         "awaiting_name": "Pour finaliser votre commande, pourriez-vous me donner votre nom et prénom ?",
                         "awaiting_phone": "Pourriez-vous me donner votre numéro de téléphone pour finaliser votre commande ?",
@@ -518,11 +536,17 @@ async def _process_request(
         )
 
     intent = intent_raw if intent_raw in ("info", "autre") else "autre"
+    history = list(_info_contexts.get(session_id, [])) if session_id and intent == "info" else None
     try:
-        response_text = await _llm_respond(intent, text_input, [])
+        response_text = await _llm_respond(intent, text_input, [], history=history)
     except Exception as exc:
         logger.error("llm_respond_error", error=str(exc)[:200])
         response_text = "Je suis désolé, je rencontre une difficulté technique. Veuillez réessayer."
+
+    if session_id and intent == "info":
+        ctx = _info_contexts.setdefault(session_id, deque(maxlen=_INFO_CTX_SIZE))
+        ctx.append({"role": "user", "content": text_input})
+        ctx.append({"role": "assistant", "content": response_text})
 
     audio = await _call_tts(response_text, skip_tts)
     return AgentResponse(

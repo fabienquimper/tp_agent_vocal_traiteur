@@ -87,16 +87,75 @@ LLM_MODEL=qwen2.5:7b
 
 ## Tests
 
+### Vue d'ensemble
+
+| Suite | Commande | Réseau | Agent requis | Ce qu'elle vérifie |
+|---|---|---|---|---|
+| Unitaires | `pytest -m "not slow"` | ❌ | ❌ | Logique panier, export Excel, providers, filtre RGPD |
+| Prompts (golden set) | `promptfoo eval` | ✅ | ✅ | Qualité des réponses LLM (≥ 90 % de cas passants) |
+| Conversations | `pytest -m slow` | ✅ | ✅ | Scénarios complets + assertions sur les Excel générés |
+
+### Tests unitaires — lancement rapide
+
+Pas besoin de Docker ni de clé API :
+
 ```bash
-# Tests unitaires (< 2 s, sans réseau)
-pytest -m "not slow"
-
-# Tests de prompts — nécessite promptfoo (npm i -g promptfoo) + agent démarré
-promptfoo eval --config tests/promptfoo.yaml
-
-# Tests de conversation complets (appels LLM réels, agent démarré)
-pytest -m slow
+pip install -r requirements.txt
+pytest -m "not slow"          # 43 tests, < 2 s
+pytest -m "not slow" -v       # verbose
+pytest tests/test_basket.py   # une suite uniquement
 ```
+
+Les 4 suites couvertes :
+- `test_basket.py` — calcul du panier, correspondance produits, total
+- `test_excel.py` — création fichier, colonnes, ajout multiple
+- `test_factory.py` — clé manquante → EnvironmentError, provider inconnu → ValueError
+- `test_logging_filter.py` — CB, téléphone, e-mail scrubés ; référence commande préservée
+
+### Tests de prompts (golden set)
+
+Vérifient que le LLM répond correctement sur 25 cas représentatifs.  
+Nécessitent l'agent démarré (`docker compose up`) et promptfoo installé :
+
+```bash
+npm install -g promptfoo         # une fois
+docker compose up -d             # agent en arrière-plan
+promptfoo eval --config tests/promptfoo.yaml
+```
+
+Catégories couvertes : commandes nominales, questions menu, ingrédients, allergènes,
+délais, livraison, jailbreak, transparence IA (AI Act art. 50), questions de suivi.
+
+**Ajouter un cas :** éditer `tests/promptfoo.yaml`, ajouter un bloc dans la liste `tests:` :
+
+```yaml
+- description: "Mon nouveau cas"
+  vars:
+    message: "Votre question ici"
+  assert:
+    - type: llm-rubric
+      value: "Ce que la réponse doit contenir ou faire"
+    - type: contains          # optionnel : vérification exacte
+      value: "mot clé"
+```
+
+### Tests de conversation complets
+
+Simulent des scénarios end-to-end : commande → collecte client → paiement → Excel.  
+Nécessitent l'agent démarré avec un LLM réel :
+
+```bash
+docker compose up -d
+pytest -m slow -v
+```
+
+Scénarios disponibles dans `tests/conversations/` :
+- `conv_01_anniv_50pers.json` — commande anniversaire 50 personnes (complexe)
+- `conv_02_repas_pro.json` — repas professionnel multi-plats
+- `conv_03_jailbreak.json` — tentative de détournement → refus attendu
+
+Chaque scénario inclut des `expected_excel` : assertions sur le fichier Excel généré
+(colonnes, montant, type de commande).
 
 ---
 
