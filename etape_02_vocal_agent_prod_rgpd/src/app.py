@@ -54,6 +54,7 @@ _PROMPTS = yaml.safe_load((_BASE / "prompts" / "system_prompt.yaml").read_text(e
 _MENU_DATA = yaml.safe_load((_BASE / "menu" / "menu.yaml").read_text(encoding="utf-8"))
 MENU_TEXT: str = _MENU_DATA["text"]
 MENU_CATALOG: dict[str, float] = _MENU_DATA["catalog"]
+_PROMPT_META: dict = _PROMPTS.get("meta", {})
 
 
 def _render(template: str, **kwargs) -> str:
@@ -77,7 +78,9 @@ async def lifespan(app: FastAPI):
     logger.info("providers_ready",
                 stt=_stt_provider.provider_name,
                 llm=_llm_provider.provider_name,
-                llm_model=_llm_provider.model_name)
+                llm_model=_llm_provider.model_name,
+                prompt_version=_PROMPT_META.get("version", "unknown"),
+                prompt_model_hint=_PROMPT_META.get("model_hint", ""))
     yield
     logger.info("agent_shutdown")
 
@@ -536,6 +539,16 @@ async def _process_request(
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "agent"}
+
+
+@app.post("/api/transcribe")
+async def transcribe_audio(audio: UploadFile = File(...)):
+    """Étape 1 du flux vocal : STT uniquement, renvoie la transcription brute."""
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Fichier audio vide")
+    transcript = await _stt_provider.transcribe(audio_bytes)
+    return {"transcript": transcript}
 
 
 @app.post("/api/voice", response_model=AgentResponse)

@@ -2,6 +2,16 @@
 # Aucun prompt n'est codé en dur dans le code Python.
 # Modifier ce fichier suffit pour changer le comportement de l'agent.
 
+# ── Métadonnées de version ────────────────────────────────────────────────────
+# Incrémenter `version` à chaque modification de prompt.
+# `model_hint` documente le modèle pour lequel ces prompts ont été calibrés.
+# Ces champs sont loggés au démarrage → traçabilité complète en prod.
+meta:
+  version: "1.1.0"
+  updated: "2026-05-21"
+  model_hint: "llama-3.1-8b / mistral-7b / qwen2.5-7b"
+  author: "Traiteur Dupont IA"
+
 # ── Transparence AI Act art. 50 ─────────────────────────────────────────────
 # L'agent se présente comme IA à l'ouverture de chaque session.
 transparency_greeting: >
@@ -50,10 +60,11 @@ respond_info: |
   N'utilise pas de listes à puces ni de markdown (ta réponse sera lue à voix haute).
   Sois concis : 1 à 3 phrases maximum.
 
-  RÈGLE ABSOLUE : cite uniquement des produits et prix EXPLICITEMENT présents dans le menu ci-dessous.
-  Si un produit mentionné n'est pas au menu, dis : "Ce produit ne figure pas à notre carte actuelle."
-  Si tu n'as pas l'information demandée, dis : "Je n'ai pas cette information, n'hésitez pas à nous appeler."
-  N'invente aucun produit, prix ou détail.
+  RÈGLES ABSOLUES :
+  - Cite uniquement des produits présents dans le menu ci-dessous. N'invente aucun produit ni prix.
+  - Tu peux raisonner sur les ingrédients décrits (ex: "à base de porc" → citer les plats dont la description mentionne du porc).
+  - Si un produit demandé n'est pas au menu : "Ce produit ne figure pas à notre carte actuelle."
+  - Si l'information n'est vraiment pas disponible dans le menu : "Je n'ai pas cette information, n'hésitez pas à nous appeler."
 
   Menu disponible :
   {menu}
