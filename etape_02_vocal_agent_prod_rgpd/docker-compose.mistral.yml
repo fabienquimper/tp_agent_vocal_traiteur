@@ -1,0 +1,40 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Override Mistral – à combiner avec docker-compose.yml
+#
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.mistral.yml \
+#     up -d stt tts agent ui
+#
+# ou plus simplement :
+#   make up-mistral MISTRAL_API_KEY=...
+#
+# Ce fichier remplace Ollama par l'API Mistral pour le LLM :
+#   - STT  : Whisper local (Mistral n'a pas d'API STT)
+#   - LLM  : mistral-small-latest via API Mistral
+#   - TTS  : piper local (inchangé, < 1 s, pas de quota)
+#
+# ⚠ Vie privée : le texte est envoyé aux serveurs Mistral AI (Paris).
+#   Pour un usage 100 % local, utilisez le mode par défaut (make up).
+#
+# Prérequis :
+#   - Un token Mistral : https://console.mistral.ai/api-keys
+#   - Variable : MISTRAL_API_KEY (obligatoire)
+#   - Variable optionnelle : MISTRAL_LLM_MODEL
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Agent LLM : mistral-small-latest via API Mistral ─────────────────────────
+  agent:
+    environment:
+      - LLM_PROVIDER=mistral
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - MISTRAL_LLM_MODEL=${MISTRAL_LLM_MODEL:-mistral-small-latest}
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false   # Ollama non démarré en mode Mistral → dépendance ignorée
+      stt:
+        condition: service_healthy
+      tts:
+        condition: service_healthy

@@ -1,0 +1,58 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRAITEUR DUPONT – Agent Vocal IA (Étape 02)
+#
+# Deux services :
+#   agent  → FastAPI + UI statique (port 8000)
+#   tts    → piper-tts, voix française 100 % locale (port 8002)
+#
+# ⚠ Ollama tourne sur l'HÔTE, pas dans Docker.
+#   Avant le premier démarrage : ./scripts/setup_ollama_local.sh
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: traiteur_agent_v2
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - ORDERS_DIR=/app/orders
+      - TTS_SERVICE_URL=http://tts:8002
+    volumes:
+      - ./orders:/app/orders
+    # Sur Linux : accès à Ollama sur l'hôte via host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      tts:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  tts:
+    build:
+      context: ./services/tts
+      dockerfile: Dockerfile
+    container_name: traiteur_tts_v2
+    ports:
+      - "8002:8002"
+    environment:
+      - TTS_PROVIDER=local
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped

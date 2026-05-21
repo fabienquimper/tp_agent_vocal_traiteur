@@ -1,0 +1,26 @@
+# ── API & Web ─────────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+pydantic-settings==2.5.2
+httpx==0.27.2
+
+# ── Config (chargement YAML) ──────────────────────────────────────────────────
+pyyaml==6.0.2
+
+# ── Excel ─────────────────────────────────────────────────────────────────────
+openpyxl==3.1.5
+
+# ── Logging structuré RGPD ────────────────────────────────────────────────────
+structlog==24.4.0
+
+# ── LLM providers ─────────────────────────────────────────────────────────────
+groq==0.12.0
+mistralai==1.2.0
+
+# ── STT local (faster-whisper, 100% hors-ligne, s'active si STT_PROVIDER=local_ollama) ──
+faster-whisper==1.0.3
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0

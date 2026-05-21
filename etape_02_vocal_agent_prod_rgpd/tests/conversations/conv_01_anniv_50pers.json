@@ -1,0 +1,17 @@
+{
+  "name": "Commande anniversaire 50 personnes",
+  "description": "Cas nominal : commande événementielle complète",
+  "turns": [
+    {"user": "Bonjour, je voudrais commander pour un anniversaire"},
+    {"user": "On sera une cinquantaine de personnes"},
+    {"user": "Je voudrais la formule buffet complet pour 50 personnes, plus des macarons en dessert"},
+    {"user": "Jean Dupont, mon téléphone c'est le 06 12 34 56 78"},
+    {"user": "Je règle en liquide"}
+  ],
+  "expected_excel": {
+    "must_contain_items": ["formule buffet complet", "macaron"],
+    "min_total_eur": 1500,
+    "max_total_eur": 2500,
+    "file": "commandes_complexes.xlsx"
+  }
+}

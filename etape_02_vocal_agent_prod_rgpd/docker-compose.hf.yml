@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Override HuggingFace – à combiner avec docker-compose.yml
+#
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.hf.yml \
+#     up -d stt tts agent ui
+#
+# ou plus simplement :
+#   make up-hf HF_API_TOKEN=hf_xxxxxxxxxxxx
+#
+# Ce fichier substitue les trois modèles IA locaux (Whisper, piper, Ollama)
+# par des appels aux APIs HuggingFace Inference.
+# Ollama n'est pas démarré (inutile en mode HF).
+#
+# Prérequis :
+#   - Un token HuggingFace gratuit : https://huggingface.co/settings/tokens
+#   - Variables : HF_API_TOKEN (obligatoire), HF_LLM_MODEL / HF_STT_MODEL /
+#     HF_TTS_MODEL (optionnelles, valeurs par défaut ci-dessous)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Speech-to-Text : whisper-large-v3 via HF API ────────────────────────────
+  stt:
+    environment:
+      - STT_PROVIDER=huggingface
+      - HF_API_TOKEN=${HF_API_TOKEN:-${HF_HUB_TOKEN:-}}
+      - HF_HUB_TOKEN=${HF_HUB_TOKEN:-${HF_API_TOKEN:-}}
+      - HF_STT_MODEL=${HF_STT_MODEL:-openai/whisper-large-v3}
+      - HF_HUB_OFFLINE=0
+
+  # ── Text-to-Speech : piper local (rapide, < 1s, pas de quota HF) ──────────
+  # TTS_PROVIDER reste "local" par défaut — piper est déjà très rapide
+  tts: {}
+
+  # ── Agent LLM : Mistral via HF Inference API ─────────────────────────────────
+  agent:
+    environment:
+      - LLM_PROVIDER=huggingface
+      - HF_API_TOKEN=${HF_API_TOKEN:-${HF_HUB_TOKEN:-}}
+      - HF_HUB_TOKEN=${HF_HUB_TOKEN:-${HF_API_TOKEN:-}}
+      - HF_LLM_MODEL=${HF_LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      - HF_HUB_OFFLINE=0
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false   # Ollama non démarré en mode HF → dépendance ignorée
+      stt:
+        condition: service_healthy
+      tts:
+        condition: service_healthy

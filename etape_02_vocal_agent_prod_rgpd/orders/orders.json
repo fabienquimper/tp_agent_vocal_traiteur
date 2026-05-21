@@ -1,0 +1,148 @@
+[
+  {
+    "nom": "Men",
+    "prenom": "Fabien",
+    "telephone": "0655443322",
+    "items": [
+      {
+        "produit": "rougail",
+        "quantite": 5
+      },
+      {
+        "produit": "quiche lorraine",
+        "quantite": 4
+      }
+    ],
+    "total": 137.0,
+    "is_complex": true,
+    "payment_method": "CB",
+    "payment_status": "Payé par CB",
+    "order_status": "Confirmée",
+    "id": "ED280336",
+    "created_at": "2026-05-09T16:17:39.600324"
+  },
+  {
+    "nom": "M",
+    "prenom": "Fabien",
+    "telephone": "06.11.22.33.44",
+    "items": [
+      {
+        "produit": "quiche aux légumes",
+        "quantite": 3
+      },
+      {
+        "produit": "rougail",
+        "quantite": 4
+      }
+    ],
+    "total": 100.0,
+    "is_complex": true,
+    "payment_method": "CB",
+    "payment_status": "Payé par CB",
+    "order_status": "Confirmée",
+    "id": "9E829274",
+    "created_at": "2026-05-10T20:47:40.562144"
+  },
+  {
+    "nom": "M",
+    "prenom": "Fabien",
+    "telephone": "06.11.222.33.44",
+    "items": [
+      {
+        "produit": "rougail saucisse",
+        "quantite": 5
+      },
+      {
+        "produit": "terrine de campagne",
+        "quantite": 3
+      }
+    ],
+    "total": 101.0,
+    "is_complex": true,
+    "payment_method": "CB",
+    "payment_status": "Payé par CB",
+    "order_status": "Confirmée",
+    "id": "D44F251C",
+    "created_at": "2026-05-11T12:41:34.206414"
+  },
+  {
+    "nom": "A",
+    "prenom": "Bernard",
+    "telephone": "0911223344",
+    "items": [
+      {
+        "produit": "coques au vin",
+        "quantite": 3
+      }
+    ],
+    "total": 0.0,
+    "is_complex": false,
+    "payment_method": "CB",
+    "payment_status": "Payé par CB",
+    "order_status": "Confirmée",
+    "id": "B43A2290",
+    "created_at": "2026-05-11T14:21:17.078924"
+  },
+  {
+    "nom": "M",
+    "prenom": "Fabien",
+    "telephone": "04.11.22.33.44",
+    "items": [
+      {
+        "produit": "rougail",
+        "quantite": 4
+      }
+    ],
+    "total": 52.0,
+    "is_complex": false,
+    "payment_method": "CB",
+    "payment_status": "Paiement refusé → règlement sur place",
+    "order_status": "Confirmée",
+    "id": "27F8C4E6",
+    "created_at": "2026-05-11T20:15:41.839189"
+  },
+  {
+    "nom": "M",
+    "prenom": "Fabien",
+    "telephone": "06-11-22-33-444",
+    "items": [
+      {
+        "produit": "rougailles saucisses",
+        "quantite": 5
+      }
+    ],
+    "total": 65.0,
+    "is_complex": false,
+    "payment_method": "CB",
+    "payment_status": "Payé par CB",
+    "order_status": "Confirmée",
+    "id": "B981AC6E",
+    "created_at": "2026-05-12T07:23:08.447486"
+  },
+  {
+    "nom": "S",
+    "prenom": "Fabien",
+    "telephone": "0611223344",
+    "items": [
+      {
+        "produit": "produit non spécifié",
+        "quantite": 7
+      },
+      {
+        "produit": "rougailles saucisses",
+        "quantite": 7
+      },
+      {
+        "produit": "terrines de campagne",
+        "quantite": 2
+      }
+    ],
+    "total": 115.0,
+    "is_complex": true,
+    "payment_method": "CB",
+    "payment_status": "Paiement refusé → règlement sur place",
+    "order_status": "Confirmée",
+    "id": "59474E21",
+    "created_at": "2026-05-13T07:24:41.795799"
+  }
+]

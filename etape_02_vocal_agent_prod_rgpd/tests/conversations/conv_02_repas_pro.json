@@ -1,0 +1,16 @@
+{
+  "name": "Repas professionnel simple",
+  "description": "Commande simple : entrée + plat + dessert pour petite réunion",
+  "turns": [
+    {"user": "Bonjour, je voudrais commander un plateau repas pour une réunion de 10 personnes"},
+    {"user": "Je prends 2 quiches lorraines, un bœuf bourguignon et 10 macarons"},
+    {"user": "Marie Martin, numéro 07 98 76 54 32"},
+    {"user": "Par carte bancaire"}
+  ],
+  "expected_excel": {
+    "must_contain_items": ["quiche lorraine", "bœuf bourguignon", "macaron"],
+    "min_total_eur": 60,
+    "max_total_eur": 200,
+    "file": "commandes_simples.xlsx"
+  }
+}
