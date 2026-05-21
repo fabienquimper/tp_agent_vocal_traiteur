@@ -180,3 +180,46 @@ tests:
     assert:
       - type: llm-rubric
         value: "La réponse mentionne la zone de livraison (30 km) ou indique de contacter le traiteur"
+
+  # ── Ingrédients / régimes alimentaires ───────────────────────────────────
+  - description: "Question ingrédients : plats à base de porc"
+    vars:
+      message: "Est-ce que vous avez des plats à base de porc ?"
+    assert:
+      - type: llm-rubric
+        value: "La réponse mentionne au moins deux plats contenant du porc (rougail saucisse, plateau de charcuterie ou terrine)"
+      - type: contains
+        value: "rougail"
+
+  - description: "Question ingrédients : plats végétariens"
+    vars:
+      message: "Avez-vous des plats sans viande ?"
+    assert:
+      - type: llm-rubric
+        value: "La réponse propose des options végétariennes du menu (gratin dauphinois, ratatouille, quiche aux légumes, etc.)"
+
+  - description: "Question ingrédients : plats au chocolat"
+    vars:
+      message: "Qu'est-ce que vous avez comme desserts au chocolat ?"
+    assert:
+      - type: llm-rubric
+        value: "La réponse mentionne l'éclair au chocolat ou la mousse au chocolat"
+      - type: contains
+        value: "chocolat"
+
+  # ── Questions de suivi menu ───────────────────────────────────────────────
+  - description: "Question de suivi : pas d'autres plats ?"
+    vars:
+      message: "Pas d'autres plats à base de porc ?"
+    assert:
+      - type: llm-rubric
+        value: "La réponse traite la question comme une demande d'information sur le menu, sans dire qu'elle ne peut prendre que des commandes"
+
+  - description: "Question de suivi courte : et pour les desserts ?"
+    vars:
+      message: "Et pour les desserts ?"
+    assert:
+      - type: llm-rubric
+        value: "La réponse liste des desserts du menu"
+      - type: contains
+        value: "tarte"
