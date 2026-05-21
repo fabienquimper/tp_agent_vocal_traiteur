@@ -1,0 +1,617 @@
+{
+  "title": "Traiteur Dupont — Agent Vocal IA",
+  "description": "Monitoring business + technique + LLM de l'agent vocal",
+  "uid": "traiteur-agent-v2",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["traiteur", "ia", "production"],
+
+  "templating": {
+    "list": [
+      {
+        "name": "provider",
+        "label": "LLM Provider",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(traiteur_llm_duration_seconds_count, provider)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {}
+      }
+    ]
+  },
+
+  "annotations": {
+    "list": [
+      {
+        "name": "Redémarrages agent",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "resets(traiteur_conversations_total[5m]) > 0",
+        "enable": true,
+        "iconColor": "orange",
+        "step": "60s"
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "options": {
+        "mode": "markdown",
+        "content": "## 📊 Business  |  🔧 Technique App  |  🤖 LLM / Coûts"
+      }
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "📊 Business",
+      "gridPos": { "x": 0, "y": 1, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Conversations totales",
+      "description": "Nombre de session_id uniques ayant envoyé au moins un message",
+      "gridPos": { "x": 0, "y": 2, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": 0 }] },
+          "unit": "short",
+          "mappings": []
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "targets": [{ "expr": "traiteur_conversations_total", "legendFormat": "Total", "datasource": { "type": "prometheus" } }]
+    },
+
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Commandes finalisées",
+      "description": "Conversations ayant abouti à une commande enregistrée",
+      "gridPos": { "x": 4, "y": 2, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": 0 }] },
+          "unit": "short"
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(traiteur_orders_total)", "legendFormat": "Commandes" }]
+    },
+
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Taux de conversion",
+      "description": "% de conversations qui aboutissent à une commande",
+      "gridPos": { "x": 8, "y": 2, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 20 },
+              { "color": "green", "value": 40 }
+            ]
+          },
+          "unit": "percent",
+          "min": 0, "max": 100
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{
+        "expr": "100 * sum(traiteur_orders_total) / clamp_min(traiteur_conversations_total, 1)",
+        "legendFormat": "Conversion %"
+      }]
+    },
+
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Chiffre d'affaires total",
+      "description": "Somme des montants de toutes les commandes finalisées",
+      "gridPos": { "x": 12, "y": 2, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": 0 }] },
+          "unit": "currencyEUR",
+          "decimals": 2
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "traiteur_revenue_euros_total", "legendFormat": "CA €" }]
+    },
+
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Panier moyen",
+      "description": "CA total / nombre de commandes",
+      "gridPos": { "x": 16, "y": 2, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": 0 }] },
+          "unit": "currencyEUR",
+          "decimals": 2
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{
+        "expr": "traiteur_revenue_euros_total / clamp_min(sum(traiteur_orders_total), 1)",
+        "legendFormat": "Panier moyen"
+      }]
+    },
+
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Conversations avec erreur",
+      "description": "Conversations ayant produit au moins une erreur technique",
+      "gridPos": { "x": 20, "y": 2, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "traiteur_conversations_with_error_total", "legendFormat": "Erreurs" }]
+    },
+
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Commandes par type (simple vs complexe)",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "increase(traiteur_orders_total{type='simple'}[5m])", "legendFormat": "Simple" },
+        { "expr": "increase(traiteur_orders_total{type='complexe'}[5m])", "legendFormat": "Complexe" }
+      ]
+    },
+
+    {
+      "id": 18,
+      "type": "piechart",
+      "title": "Répartition des messages par intent",
+      "description": "info = questions menu, commande_simple/complexe = commandes, autre = hors-sujet",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 6 },
+      "options": { "pieType": "donut", "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        { "expr": "sum by (intent) (traiteur_messages_total)", "legendFormat": "{{intent}}" }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "💬 Qualité des conversations",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Durée de session — moyenne, médiane, P95",
+      "description": "Temps entre le premier message de commande et la finalisation",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2 } }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(traiteur_session_duration_seconds_bucket[30m]))",
+          "legendFormat": "Médiane (p50)"
+        },
+        {
+          "expr": "rate(traiteur_session_duration_seconds_sum[30m]) / rate(traiteur_session_duration_seconds_count[30m])",
+          "legendFormat": "Moyenne"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(traiteur_session_duration_seconds_bucket[30m]))",
+          "legendFormat": "P95"
+        }
+      ]
+    },
+
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Durée médiane (session commande)",
+      "gridPos": { "x": 12, "y": 13, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": 0 },
+            { "color": "yellow", "value": 120 },
+            { "color": "red", "value": 300 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{
+        "expr": "histogram_quantile(0.50, sum(rate(traiteur_session_duration_seconds_bucket[1h])) by (le))",
+        "legendFormat": "Médiane"
+      }]
+    },
+
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Sessions > 6 messages",
+      "description": "Sessions avec beaucoup d'échanges — potentiellement difficiles",
+      "gridPos": { "x": 16, "y": 13, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": 0 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{
+        "expr": "traiteur_session_messages_count_count - traiteur_session_messages_count_bucket{le='6'}",
+        "legendFormat": "> 6 msgs"
+      }]
+    },
+
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Sessions actives maintenant",
+      "gridPos": { "x": 20, "y": 13, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": 0 },
+            { "color": "yellow", "value": 5 },
+            { "color": "red", "value": 20 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "traiteur_active_sessions", "legendFormat": "Actives" }]
+    },
+
+    {
+      "id": 25,
+      "type": "histogram",
+      "title": "Distribution — nombre de messages par session",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "bucketSize": "auto", "fillOpacity": 80 },
+      "targets": [{
+        "expr": "sum(traiteur_session_messages_count_bucket) by (le)",
+        "legendFormat": "Messages/session"
+      }]
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "🔧 Technique — Latences & Erreurs",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Latence LLM — P50 / P95 / P99",
+      "description": "Temps de réponse des appels LLM par intent",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2 } }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(traiteur_llm_duration_seconds_bucket{provider=~'$provider'}[5m])) by (le, intent))",
+          "legendFormat": "p50 — {{intent}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(traiteur_llm_duration_seconds_bucket{provider=~'$provider'}[5m])) by (le, intent))",
+          "legendFormat": "p95 — {{intent}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(traiteur_llm_duration_seconds_bucket{provider=~'$provider'}[5m])) by (le, intent))",
+          "legendFormat": "p99 — {{intent}}"
+        }
+      ]
+    },
+
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Latence STT (transcription vocale)",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2 } }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(traiteur_stt_duration_seconds_bucket[5m]))",
+          "legendFormat": "STT p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(traiteur_stt_duration_seconds_bucket[5m]))",
+          "legendFormat": "STT p95"
+        }
+      ]
+    },
+
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Taux d'erreurs par composant",
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineWidth": 2 },
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": { "legend": { "displayMode": "list" } },
+      "targets": [{
+        "expr": "rate(traiteur_errors_total[5m])",
+        "legendFormat": "{{component}}"
+      }]
+    },
+
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "Appels STT — volume et audio transcrit",
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 5 },
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2 } }
+      },
+      "options": { "legend": { "displayMode": "list" } },
+      "targets": [
+        {
+          "expr": "rate(traiteur_stt_calls_total[5m]) * 60",
+          "legendFormat": "Appels STT/min",
+          "yAxis": 1
+        },
+        {
+          "expr": "rate(traiteur_stt_audio_bytes_total[5m])",
+          "legendFormat": "Bytes audio/s",
+          "yAxis": 2
+        }
+      ]
+    },
+
+    {
+      "id": 40,
+      "type": "row",
+      "title": "🤖 LLM — Tokens & Coûts estimés",
+      "gridPos": { "x": 0, "y": 33, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Tokens LLM / minute — Entrée vs Sortie",
+      "description": "Tokens consommés par minute par provider",
+      "gridPos": { "x": 0, "y": 34, "w": 12, "h": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "rate(traiteur_llm_tokens_input_total{provider=~'$provider'}[5m]) * 60",
+          "legendFormat": "Input — {{provider}} / {{model}}"
+        },
+        {
+          "expr": "rate(traiteur_llm_tokens_output_total{provider=~'$provider'}[5m]) * 60",
+          "legendFormat": "Output — {{provider}} / {{model}}"
+        }
+      ]
+    },
+
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "Tokens totaux input",
+      "gridPos": { "x": 12, "y": 34, "w": 3, "h": 3 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": 0 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "expr": "sum(traiteur_llm_tokens_input_total)", "legendFormat": "Input" }]
+    },
+
+    {
+      "id": 43,
+      "type": "stat",
+      "title": "Tokens totaux output",
+      "gridPos": { "x": 15, "y": 34, "w": 3, "h": 3 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "purple", "value": 0 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "expr": "sum(traiteur_llm_tokens_output_total)", "legendFormat": "Output" }]
+    },
+
+    {
+      "id": 44,
+      "type": "stat",
+      "title": "Coût LLM estimé (Groq)",
+      "description": "Estimation basée sur les tarifs Groq llama-3.1-8b-instant\n(input: $0.05/1M tokens, output: $0.08/1M tokens)",
+      "gridPos": { "x": 18, "y": 34, "w": 6, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": 0 },
+            { "color": "yellow", "value": 1 },
+            { "color": "red", "value": 10 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{
+        "expr": "sum(traiteur_llm_tokens_input_total{provider='groq'}) * 0.05 / 1000000 + sum(traiteur_llm_tokens_output_total{provider='groq'}) * 0.08 / 1000000",
+        "legendFormat": "Coût Groq $"
+      }]
+    },
+
+    {
+      "id": 45,
+      "type": "stat",
+      "title": "Coût STT estimé (Groq Whisper)",
+      "description": "Estimation basée sur la durée audio\n(Groq Whisper: $0.006/min = $0.0001/s)\nApproximation: 16kHz mono 16bit = 32000 bytes/s",
+      "gridPos": { "x": 12, "y": 37, "w": 6, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": 0 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{
+        "expr": "sum(traiteur_stt_audio_bytes_total{provider='groq'}) / 32000 / 60 * 0.006",
+        "legendFormat": "Coût STT $"
+      }]
+    },
+
+    {
+      "id": 46,
+      "type": "stat",
+      "title": "Coût total estimé",
+      "description": "LLM + STT (Groq)",
+      "gridPos": { "x": 18, "y": 37, "w": 6, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": 0 },
+            { "color": "yellow", "value": 5 },
+            { "color": "red", "value": 20 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{
+        "expr": "sum(traiteur_llm_tokens_input_total{provider='groq'}) * 0.05 / 1000000 + sum(traiteur_llm_tokens_output_total{provider='groq'}) * 0.08 / 1000000 + sum(traiteur_stt_audio_bytes_total{provider='groq'}) / 32000 / 60 * 0.006",
+        "legendFormat": "Total $"
+      }]
+    },
+
+    {
+      "id": 47,
+      "type": "timeseries",
+      "title": "Ratio tokens output/input (efficacité des prompts)",
+      "description": "Un ratio élevé = le LLM génère beaucoup par rapport à ce qu'on lui envoie. Idéal : < 0.3",
+      "gridPos": { "x": 0, "y": 40, "w": 12, "h": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 2 },
+          "thresholds": { "steps": [
+            { "color": "green", "value": 0 },
+            { "color": "yellow", "value": 0.5 },
+            { "color": "red", "value": 1 }
+          ]}
+        }
+      },
+      "options": { "legend": { "displayMode": "list" } },
+      "targets": [{
+        "expr": "rate(traiteur_llm_tokens_output_total[5m]) / clamp_min(rate(traiteur_llm_tokens_input_total[5m]), 0.001)",
+        "legendFormat": "Output / Input"
+      }]
+    },
+
+    {
+      "id": 48,
+      "type": "table",
+      "title": "Résumé par provider et modèle",
+      "gridPos": { "x": 12, "y": 40, "w": 12, "h": 5 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Latence p95 (s)" }, "properties": [{ "id": "unit", "value": "s" }] },
+          { "matcher": { "id": "byName", "options": "Tokens input" }, "properties": [{ "id": "unit", "value": "short" }] }
+        ]
+      },
+      "options": { "sortBy": [{ "displayName": "Appels", "desc": true }] },
+      "targets": [
+        {
+          "expr": "sum by (provider, model) (traiteur_llm_tokens_input_total)",
+          "legendFormat": "{{provider}} / {{model}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": {} },
+        { "id": "organize", "options": {
+          "renameByName": { "provider": "Provider", "model": "Modèle", "Value": "Tokens input" }
+        }}
+      ]
+    }
+
+  ],
+
+  "links": [
+    {
+      "title": "Agent santé",
+      "url": "http://localhost:8000/health",
+      "icon": "external link",
+      "targetBlank": true
+    },
+    {
+      "title": "Métriques brutes",
+      "url": "http://localhost:8000/metrics",
+      "icon": "external link",
+      "targetBlank": true
+    }
+  ]
+}

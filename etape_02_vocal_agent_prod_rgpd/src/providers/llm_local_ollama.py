@@ -15,6 +15,7 @@ class LocalOllamaLLMProvider(LLMProvider):
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._temperature = temperature
+        self._last_usage = {"input_tokens": 0, "output_tokens": 0}
 
     async def chat(self, messages: list[dict], max_tokens: int = 512) -> str:
         async with httpx.AsyncClient(timeout=120) as client:
@@ -28,7 +29,16 @@ class LocalOllamaLLMProvider(LLMProvider):
                 },
             )
             resp.raise_for_status()
-            return resp.json()["message"]["content"].strip()
+            data = resp.json()
+            self._last_usage = {
+                "input_tokens": data.get("prompt_eval_count", 0),
+                "output_tokens": data.get("eval_count", 0),
+            }
+            return data["message"]["content"].strip()
+
+    @property
+    def last_usage(self) -> dict:
+        return self._last_usage
 
     @property
     def provider_name(self) -> str:

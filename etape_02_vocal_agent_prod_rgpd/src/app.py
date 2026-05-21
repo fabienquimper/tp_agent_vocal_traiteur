@@ -37,8 +37,10 @@ import httpx
 import yaml
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response as HTTPResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 from .factory import create_stt_provider, create_llm_provider
 from .logging_config import setup_logging, get_logger, log_stt_event, log_llm_event, log_order_event, maybe_log_transcript
@@ -47,6 +49,64 @@ from .excel_export import write_order
 
 # ── Initialisation du logging ──────────────────────────────────────────────────
 setup_logging()
+
+# ── Métriques Prometheus ───────────────────────────────────────────────────────
+# Métriques métier exposées sur GET /metrics (format Prometheus text)
+_m_orders = Counter(
+    "traiteur_orders_total", "Commandes enregistrées", ["type"]  # simple | complexe
+)
+_m_llm_latency = Histogram(
+    "traiteur_llm_duration_seconds", "Latence LLM par intent", ["provider", "intent"],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
+)
+_m_stt_latency = Histogram(
+    "traiteur_stt_duration_seconds", "Latence STT", ["provider"],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
+)
+_m_active_sessions = Gauge("traiteur_active_sessions", "Sessions de commande en cours")
+_m_errors = Counter("traiteur_errors_total", "Erreurs par composant", ["component"])
+
+# ── Métriques business ─────────────────────────────────────────────────────────
+_m_conversations = Counter(
+    "traiteur_conversations_total", "Conversations démarrées (session_id unique)"
+)
+_m_messages = Counter(
+    "traiteur_messages_total", "Messages traités", ["intent"]
+)
+_m_conversations_with_error = Counter(
+    "traiteur_conversations_with_error_total", "Conversations ayant produit au moins une erreur"
+)
+_m_revenue = Counter(
+    "traiteur_revenue_euros_total", "Chiffre d'affaires total en euros"
+)
+
+# ── Métriques qualité session ──────────────────────────────────────────────────
+_m_session_duration = Histogram(
+    "traiteur_session_duration_seconds", "Durée totale d'une session commande",
+    buckets=[5, 15, 30, 60, 120, 300, 600],
+)
+_m_session_messages = Histogram(
+    "traiteur_session_messages_count", "Nombre de messages par session commande",
+    buckets=[1, 2, 3, 4, 5, 6, 8, 10, 15, 20],
+)
+
+# ── Métriques LLM (tokens + coûts) ────────────────────────────────────────────
+_m_llm_tokens_input = Counter(
+    "traiteur_llm_tokens_input_total", "Tokens d'entrée LLM", ["provider", "model"]
+)
+_m_llm_tokens_output = Counter(
+    "traiteur_llm_tokens_output_total", "Tokens de sortie LLM", ["provider", "model"]
+)
+_m_stt_calls = Counter(
+    "traiteur_stt_calls_total", "Appels STT", ["provider", "model"]
+)
+_m_stt_audio_bytes = Counter(
+    "traiteur_stt_audio_bytes_total", "Octets audio transcrits", ["provider"]
+)
+
+# Suivi des session_ids vus (pour compter les conversations uniques)
+_seen_sessions: set[str] = set()
+
 logger = get_logger(__name__)
 
 # ── Chargement des prompts et du menu ─────────────────────────────────────────
@@ -121,6 +181,8 @@ class OrderSession:
     payment_method: Optional[str] = None
     order_id: Optional[str] = None
     last_activity: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=datetime.now)
+    message_count: int = 0
 
 
 _sessions: dict[str, OrderSession] = {}
@@ -149,6 +211,7 @@ def _create_session(session_id: str, basket: dict, is_complex: bool, total: floa
         basket=basket, is_complex=is_complex, total=total,
     )
     _sessions[session_id] = session
+    _m_active_sessions.set(len(_sessions))
     return session
 
 
@@ -249,11 +312,20 @@ async def _llm_respond(intent: str, text: str, order_items: list, history: list[
 
     try:
         response = await _llm_provider.chat(messages, max_tokens=512)
-        duration_ms = int((time.perf_counter() - t0) * 1000)
-        log_llm_event(logger, _llm_provider.provider_name, _llm_provider.model_name, duration_ms, intent)
+        duration_s = time.perf_counter() - t0
+        log_llm_event(logger, _llm_provider.provider_name, _llm_provider.model_name, int(duration_s * 1000), intent)
+        _m_llm_latency.labels(provider=_llm_provider.provider_name, intent=intent).observe(duration_s)
+        usage = _llm_provider.last_usage
+        _m_llm_tokens_input.labels(
+            provider=_llm_provider.provider_name, model=_llm_provider.model_name
+        ).inc(usage["input_tokens"])
+        _m_llm_tokens_output.labels(
+            provider=_llm_provider.provider_name, model=_llm_provider.model_name
+        ).inc(usage["output_tokens"])
         return response
     except Exception as exc:
         logger.error("llm_respond_error", error=str(exc)[:200])
+        _m_errors.labels(component="llm").inc()
         raise
 
 
@@ -329,12 +401,21 @@ async def _finalize_order(session: OrderSession, payment_status: str) -> str:
     )
 
     log_order_event(logger, order_id, len(items), session.is_complex)
+    order_type = "complexe" if session.is_complex else "simple"
+    _m_orders.labels(type=order_type).inc()
+    _m_revenue.inc(session.total)
+    duration_s = (datetime.now() - session.created_at).total_seconds()
+    _m_session_duration.observe(duration_s)
+    _m_session_messages.observe(session.message_count)
+    _sessions.pop(session.session_id, None)
+    _m_active_sessions.set(len(_sessions))
     return order_id
 
 
 # ── Machine à états de collecte d'informations ────────────────────────────────
 
 async def _handle_session_step(session: OrderSession, text: str, skip_tts: bool) -> AgentResponse:
+    session.message_count += 1
     response_text = ""
     order_id_result = None
 
@@ -416,9 +497,19 @@ async def _process_request(
     if audio_bytes:
         t0 = time.perf_counter()
         text_input = await _stt_provider.transcribe(audio_bytes)
-        duration_ms = int((time.perf_counter() - t0) * 1000)
-        log_stt_event(logger, _stt_provider.provider_name, duration_ms, "fr")
+        duration_s = time.perf_counter() - t0
+        log_stt_event(logger, _stt_provider.provider_name, int(duration_s * 1000), "fr")
+        _m_stt_latency.labels(provider=_stt_provider.provider_name).observe(duration_s)
+        _m_stt_calls.labels(
+            provider=_stt_provider.provider_name, model=getattr(_stt_provider, "_model", "unknown")
+        ).inc()
+        _m_stt_audio_bytes.labels(provider=_stt_provider.provider_name).inc(len(audio_bytes))
         maybe_log_transcript(logger, text_input)
+
+    # Comptage conversation unique
+    if session_id and session_id not in _seen_sessions:
+        _seen_sessions.add(session_id)
+        _m_conversations.inc()
 
     if not text_input.strip():
         return AgentResponse(
@@ -537,16 +628,21 @@ async def _process_request(
 
     intent = intent_raw if intent_raw in ("info", "autre") else "autre"
     history = list(_info_contexts.get(session_id, [])) if session_id and intent == "info" else None
+    is_error = False
     try:
         response_text = await _llm_respond(intent, text_input, [], history=history)
     except Exception as exc:
         logger.error("llm_respond_error", error=str(exc)[:200])
         response_text = "Je suis désolé, je rencontre une difficulté technique. Veuillez réessayer."
+        is_error = True
+        _m_conversations_with_error.inc()
 
     if session_id and intent == "info":
         ctx = _info_contexts.setdefault(session_id, deque(maxlen=_INFO_CTX_SIZE))
         ctx.append({"role": "user", "content": text_input})
         ctx.append({"role": "assistant", "content": response_text})
+
+    _m_messages.labels(intent=intent).inc()
 
     audio = await _call_tts(response_text, skip_tts)
     return AgentResponse(
@@ -555,6 +651,7 @@ async def _process_request(
         response_text=response_text,
         audio_base64=_audio_b64(audio),
         session_id=session_id,
+        is_error=is_error,
     )
 
 
@@ -563,6 +660,12 @@ async def _process_request(
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "agent"}
+
+
+@app.get("/metrics")
+def metrics():
+    """Endpoint Prometheus — scraped par prometheus/grafana."""
+    return HTTPResponse(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/api/transcribe")

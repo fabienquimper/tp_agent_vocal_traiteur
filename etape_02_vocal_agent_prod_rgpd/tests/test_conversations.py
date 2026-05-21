@@ -6,10 +6,12 @@ Ne tournent pas à chaque commit, uniquement sur PR vers main et sur tag.
 Lancer : pytest -m slow --timeout=120
 """
 
+import asyncio
 import json
 import os
 import sys
 import pytest
+import pytest_asyncio
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -25,6 +27,13 @@ def _load_conv(filename: str) -> dict:
 
 
 @pytest.fixture(scope="module")
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest_asyncio.fixture(scope="module")
 async def http_client():
     import httpx
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=60) as client:

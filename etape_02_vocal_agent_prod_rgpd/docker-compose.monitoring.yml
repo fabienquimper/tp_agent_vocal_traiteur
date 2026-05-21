@@ -1,0 +1,35 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Stack de monitoring — optionnelle, non requise pour faire tourner l'agent.
+#
+# Démarre prometheus + grafana en plus de l'agent :
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up
+#
+# Grafana : http://localhost:3000  (admin / admin)
+# Prometheus : http://localhost:9090
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: traiteur_prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: traiteur_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped

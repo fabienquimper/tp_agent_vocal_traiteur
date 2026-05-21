@@ -6,6 +6,13 @@ Règles :
 - Ne JAMAIS logger le contenu des conversations, noms, téléphones, ou numéros de carte.
 - Les transcriptions STT ne sont loggées qu'en mode DEBUG_LOCAL=true (désactivé par défaut).
 - Un filtre regex scrub les patterns sensibles résiduels par sécurité.
+
+Catégories de données masquées (RGPD art. 9 pour les catégories spéciales) :
+  [CC]      → numéros de carte bancaire
+  [PHONE]   → numéros de téléphone français
+  [EMAIL]   → adresses e-mail
+  [HEALTH]  → données de santé et régimes alimentaires religieux
+              (allergi*, intoléran*, halal, casher, diabèt*, coeliaqu*, etc.)
 """
 
 import logging
@@ -17,23 +24,39 @@ import structlog
 
 _DEBUG_LOCAL = os.getenv("DEBUG_LOCAL", "false").lower() == "true"
 
-_SENSITIVE_PATTERNS = [
-    re.compile(r'\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b'),  # carte bancaire
-    re.compile(r'(?:\+33\s?|0)[1-9](?:[\s.\-]?\d{2}){4}'),           # téléphone FR
-    re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'),  # email
+# ── Catégorie 1 : données d'identification ────────────────────────────────────
+_PATTERNS_PII = [
+    (re.compile(r'\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b'), "[CC]"),
+    (re.compile(r'(?:\+33\s?|0)[1-9](?:[\s.\-]?\d{2}){4}'), "[PHONE]"),
+    (re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'), "[EMAIL]"),
+]
+
+# ── Catégorie 2 : données sensibles RGPD art. 9 ───────────────────────────────
+# Santé (allergi*, intoléran*, pathologies courantes) + convictions religieuses
+# (régimes halal/casher) → catégories spéciales interdites de traitement sans
+# consentement explicite. On masque leur apparition éventuelle dans les logs.
+_PATTERNS_SPECIAL = [
+    (re.compile(
+        r'\b(allergi\w*|intoléran\w*|intoleran\w*|coeliaqu\w*|celiaqu\w*'
+        r'|diab[eèé]t\w*|asthmat\w*|cardiaque\w*'
+        r'|halal|haram|casher|kosher|cacher'
+        r'|v[eé]g[eé]tali\w*)\b',
+        re.IGNORECASE,
+    ), "[HEALTH]"),
 ]
 
 
 def _scrub(value: str) -> str:
-    for pattern in _SENSITIVE_PATTERNS:
-        value = pattern.sub("[REDACTED]", value)
+    for pattern, label in _PATTERNS_PII + _PATTERNS_SPECIAL:
+        value = pattern.sub(label, value)
     return value
 
 
 class _ScrubFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = _scrub(str(record.msg))
-        record.args = tuple(_scrub(str(a)) for a in record.args) if record.args else record.args
+        if record.args:
+            record.args = tuple(_scrub(str(a)) for a in record.args)
         return True
 
 

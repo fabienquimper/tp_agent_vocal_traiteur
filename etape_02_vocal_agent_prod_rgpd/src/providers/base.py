@@ -39,3 +39,12 @@ class LLMProvider(ABC):
     @abstractmethod
     def model_name(self) -> str:
         ...
+
+    @property
+    def last_usage(self) -> dict:
+        """
+        Retourne l'usage tokens du dernier appel :
+        {"input_tokens": int, "output_tokens": int}
+        Les providers qui ne supportent pas les token counts retournent {0, 0}.
+        """
+        return {"input_tokens": 0, "output_tokens": 0}
