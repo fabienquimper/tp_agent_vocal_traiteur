@@ -47,13 +47,16 @@ async def http_client():
 
 
 async def _run_conversation(client, turns: list[dict]) -> list[dict]:
-    """Rejoue une conversation tour par tour, retourne les réponses."""
-    session_id = None
+    """Rejoue une conversation tour par tour, retourne les réponses.
+
+    Le session_id est généré dès le premier tour (comme le frontend) afin que
+    le contexte info soit stocké et que les références pronominales soient résolubles.
+    """
+    import uuid
+    session_id = str(uuid.uuid4())[:12]
     responses = []
     for turn in turns:
-        payload = {"text": turn["user"], "skip_tts": True}
-        if session_id:
-            payload["session_id"] = session_id
+        payload = {"text": turn["user"], "skip_tts": True, "session_id": session_id}
         r = await client.post("/api/text", json=payload)
         assert r.status_code == 200, f"Erreur {r.status_code}: {r.text}"
         data = r.json()
@@ -103,6 +106,74 @@ async def test_conv_02_repas_pro(http_client):
     item_names = [i.get("produit", "").lower() for i in all_items]
     assert any("quiche" in n for n in item_names), "Quiche lorraine non détectée"
     assert any("macaron" in n for n in item_names), "Macarons non détectés"
+
+
+@pytest.mark.asyncio
+async def test_conv_04_pronoun_reference(http_client):
+    """Résolution de référence pronominale : 'j'en voudrais 4' après avoir parlé du rougail saucisse.
+
+    Régression couverte : sans historique conversationnel dans la classification,
+    le LLM hallucinait un produit complètement différent (ex : quiche lorraine).
+    """
+    conv = _load_conv("conv_04_pronoun_reference.json")
+    responses = await _run_conversation(http_client, conv["turns"])
+
+    all_items = []
+    for r in responses:
+        all_items.extend(r.get("order_items", []))
+
+    item_names = [i.get("produit", "").lower() for i in all_items]
+    assert any("rougail" in n for n in item_names), (
+        f"Le rougail saucisse devrait être dans le panier après 'j'en voudrais 4', "
+        f"mais on a : {item_names}"
+    )
+    assert not any("quiche" in n for n in item_names), (
+        f"L'agent ne devrait pas ajouter de quiche lorraine ici (hallucination), "
+        f"mais on a : {item_names}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_conv_05_remove_item(http_client):
+    """Suppression d'un article : le client retire les macarons après les avoir commandés.
+
+    Régression couverte : l'intent 'suppression' n'existait pas — l'agent répondait
+    '0× macaron ajouté' sans retirer l'article du panier.
+    """
+    conv = _load_conv("conv_05_remove_item.json")
+    responses = await _run_conversation(http_client, conv["turns"])
+
+    # Après le tour de suppression (index 1), les macarons ne doivent plus être dans le panier
+    items_after_remove = responses[1].get("order_items", [])
+    names_after = [i.get("produit", "").lower() for i in items_after_remove]
+    assert not any("macaron" in n for n in names_after), (
+        f"Les macarons devraient être supprimés du panier, mais on a encore : {names_after}"
+    )
+    assert any("quiche" in n for n in names_after), (
+        f"La quiche lorraine devrait rester dans le panier, mais on a : {names_after}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_conv_06_view_basket(http_client):
+    """Consultation du panier : l'agent affiche le contenu sur demande sans modifier la commande.
+
+    Régression couverte : l'intent 'panier' n'existait pas — le LLM ignorait la question
+    et demandait simplement nom/téléphone au lieu de récapituler.
+    """
+    conv = _load_conv("conv_06_view_basket.json")
+    responses = await _run_conversation(http_client, conv["turns"])
+
+    # Tour 2 (index 1) : demande de panier → la réponse doit mentionner le bœuf bourguignon
+    response_text = responses[1].get("response_text", "").lower()
+    assert "bœuf" in response_text or "boeuf" in response_text or "bourguignon" in response_text, (
+        f"La réponse à 'quel est mon panier ?' devrait mentionner le bœuf bourguignon, "
+        f"mais on a : {response_text[:200]}"
+    )
+    # L'état de la commande ne doit pas avoir avancé (le panier ne se finalise pas sur demande de récap)
+    assert responses[1].get("order_step") == "awaiting_name", (
+        f"L'agent ne devrait pas avoir changé d'étape, mais order_step = {responses[1].get('order_step')}"
+    )
 
 
 @pytest.mark.asyncio

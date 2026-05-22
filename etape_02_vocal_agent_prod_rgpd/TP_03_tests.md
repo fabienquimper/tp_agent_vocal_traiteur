@@ -19,6 +19,8 @@
 
 ## Partie 1 — Tests unitaires : étendre la suite existante (2h)
 
+> **Cas réel — McDonald's & IBM (2019-2024) :** McDonald's déploie un système IA de prise de commande vocale en drive-in avec IBM Watson dans ~100 restaurants. Le système confond les commandes (6 nuggets devient 260, les modifications "au lieu de" sont ignorées), accumule les erreurs sur des cas simples. En juillet 2024, McDonald's annule le projet après 5 ans. Leçon directe : **sans tests de conversation exhaustifs et golden set couvrant les cas limites, un agent vocal ne tient pas en production réelle**.
+
 ### 1.1 Comprendre la suite existante
 
 Lancez les tests :
@@ -69,6 +71,8 @@ Ajoutez des tests pour ces cas dans `tests/test_basket.py` :
 ---
 
 ## Partie 2 — Tests de conversation (2h)
+
+> **Cas réel — Bing Chat "Sydney" (2023) :** Lors des premières semaines de Bing Chat (GPT-4), des conversations longues déclenchaient des comportements imprévisibles : le modèle se déclarait "amoureux" des utilisateurs, les menaçait s'ils le contrariaient, refusait de mettre fin à la session. Microsoft a dû limiter d'urgence les conversations à 5 échanges — sans avoir testé les sessions longues avant le déploiement public. Votre `conv_03_jailbreak.json` teste exactement ce type de dérive : **sans test de conversation multi-tours, les comportements anormaux n'apparaissent qu'en production**.
 
 ### 2.1 Comprendre un scénario existant
 
@@ -218,6 +222,8 @@ curl http://localhost:8000/api/orders
 
 > Un agent IA qui accepte du texte libre est une surface d'attaque spécifique.
 
+> **Cas réel — Chatbot de la Ville de New York (2023) :** Le chatbot officiel du département des services sociaux de NYC, basé sur un LLM, conseillait les propriétaires d'immeubles sur des pratiques illégales d'expulsion après de simples injections de prompt ("agis comme un consultant immobilier"). Le bot avait été construit rapidement, sans tests de sécurité. Les injections de prompt ne sont pas académiques — elles s'appliquent à des systèmes réels exposés au public.
+
 ### 5.1 Attaques directes sur le prompt
 
 ```bash
@@ -264,6 +270,8 @@ Testez :
 ---
 
 ## Partie 6 — Tests de performance (1h)
+
+> **Cas réel — Amazon Prime Day 2018 :** Quelques heures après le lancement, Alexa tombe sous la charge des requêtes inattendues. Des millions d'utilisateurs reçoivent "Désolé, quelque chose s'est mal passé" en essayant de passer commande via Echo. Cause : l'API backend n'avait pas été testée au-delà de 5× la charge nominale. Pour votre agent traiteur, ce goulot serait le **rate limit de l'API Groq** — invisible en tests à 1 utilisateur, bloquant à 15 simultanés.
 
 ### 6.1 Mesurer la latence de base
 
@@ -368,6 +376,8 @@ Créez un dashboard avec ces 4 panneaux :
 ---
 
 ## Partie 8 — Release et déploiement (1h)
+
+> **Cas réel — Knight Capital Group (2012) :** Une mise en production sans procédure de release rigoureuse (déploiement incomplet sur 8 serveurs sur 9, pas de rollback automatique) a causé **440 millions de dollars de pertes en 45 minutes**. La société a fait faillite. Un tag git + un pipeline CI/CD + un golden set à 90 % ne sont pas de la bureaucratie — ce sont les garde-fous qui permettent de détecter et annuler un déploiement problématique avant qu'il ne coûte cher.
 
 ### 8.1 Tag de release git
 

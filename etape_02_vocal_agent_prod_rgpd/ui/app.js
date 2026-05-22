@@ -29,8 +29,11 @@ let audioChunks    = [];
 let isRecording    = false;
 let currentAudio   = null;
 
-// Session de commande : ID unique par chargement de page, partagé avec le backend
-let sessionId = null;
+// Session stable depuis le chargement de la page : permet au backend de conserver
+// le contexte conversationnel (historique info) avant même le début d'une commande.
+// Sans ça, les références pronominales ("j'en veux 4") ne peuvent pas être résolues.
+const _genId = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 14));
+let sessionId = _genId();
 let currentOrderTotal = null;
 
 // ── Vérification de l'état du service ─────────────────────────────────────────
@@ -168,9 +171,9 @@ function handleAgentResponse(data) {
     addPaymentForm(data.order_total ?? currentOrderTotal);
   }
 
-  // Commande finalisée : nettoyer la session locale
+  // Commande finalisée : nouveau contexte pour la prochaine conversation
   if (data.order_step === 'complete') {
-    sessionId = null;
+    sessionId = _genId();
     currentOrderTotal = null;
   }
 }
@@ -230,7 +233,7 @@ function addPaymentForm(total) {
       div.remove(); // Retire le formulaire
 
       if (result.success) {
-        sessionId = null;
+        sessionId = _genId();
         currentOrderTotal = null;
         const totalLabel = (result.order_total > 0) ? `${result.order_total.toFixed(2)} €` : 'montant à confirmer';
         const msg = `✅ Paiement accepté ! Votre commande n°${result.order_id} est confirmée. Montant débité : ${totalLabel}.`;
@@ -276,7 +279,7 @@ function addOnSitePaymentChoice() {
         method: 'POST',
       });
       const result = await res.json();
-      sessionId = null;
+      sessionId = _genId();
       currentOrderTotal = null;
       addMessage(`✅ ${result.message}`, 'bot');
     } catch (err) {
@@ -286,7 +289,7 @@ function addOnSitePaymentChoice() {
 
   div.querySelector('#btnCancel').addEventListener('click', () => {
     div.remove();
-    sessionId = null;
+    sessionId = _genId();
     currentOrderTotal = null;
     addMessage('Commande annulée. N\'hésitez pas à repasser une commande quand vous le souhaitez !', 'bot');
   });

@@ -1,0 +1,14 @@
+{
+  "name": "Suppression d'un article du panier",
+  "description": "Le client commande deux articles, puis demande à retirer les macarons. L'agent doit retirer les macarons sans toucher à la quiche lorraine.",
+  "turns": [
+    {"user": "Je voudrais commander 4 quiches lorraines et 3 macarons"},
+    {"user": "Finalement, retirez les macarons s'il vous plaît"},
+    {"user": "Jean Martin, 07 65 43 21 09"},
+    {"user": "Par carte bancaire"}
+  ],
+  "expected": {
+    "item_removed": "macaron",
+    "item_kept": "quiche"
+  }
+}

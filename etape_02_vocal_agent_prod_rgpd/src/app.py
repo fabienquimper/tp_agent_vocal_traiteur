@@ -44,7 +44,7 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 
 from .factory import create_stt_provider, create_llm_provider
 from .logging_config import setup_logging, get_logger, log_stt_event, log_llm_event, log_order_event, maybe_log_transcript
-from .basket import from_order_items, to_order_items, compute_total, total_units, format_basket, add_item
+from .basket import from_order_items, to_order_items, compute_total, total_units, format_basket, add_item, remove_item
 from .excel_export import write_order
 
 # ── Initialisation du logging ──────────────────────────────────────────────────
@@ -264,14 +264,18 @@ def _audio_b64(audio_bytes: Optional[bytes]) -> Optional[str]:
 
 # ── LLM helpers ────────────────────────────────────────────────────────────────
 
-async def _llm_classify(text: str) -> dict:
-    """Classify intent and extract order items from user text."""
+async def _llm_classify(text: str, history: list[dict] | None = None) -> dict:
+    """Classify intent and extract order items from user text.
+
+    history: derniers échanges (user + assistant) pour résoudre les références
+    pronominales ("j'en veux 4", "celui-là", etc.).
+    """
     t0 = time.perf_counter()
     prompt = _render(_PROMPTS["classify"], menu=MENU_TEXT)
-    messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": text},
-    ]
+    messages = [{"role": "system", "content": prompt}]
+    if history:
+        messages.extend(history[-4:])  # 2 derniers échanges au maximum
+    messages.append({"role": "user", "content": text})
     try:
         raw = await _llm_provider.chat(messages, max_tokens=256)
         duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -522,22 +526,24 @@ async def _process_request(
     if session_id:
         session = _get_session(session_id)
         if session and session.step not in ("complete",):
-            # Classifier d'abord pour détecter infos ou ajouts d'articles
+            # Classifier avec historique pour résoudre les références pronominales
             try:
-                data = await _llm_classify(text_input)
+                ctx_history = list(_info_contexts.get(session_id, []))
+                data = await _llm_classify(text_input, history=ctx_history or None)
                 intent_raw = data.get("intent", "autre")
 
+                _REMINDER = {
+                    "awaiting_name": "Pour finaliser, pourriez-vous me donner votre nom et prénom ?",
+                    "awaiting_phone": "Pourriez-vous me donner votre numéro de téléphone ?",
+                    "awaiting_payment": "Souhaitez-vous régler par carte bancaire (CB) ou en liquide ?",
+                }
+
                 if intent_raw == "info":
-                    history = list(_info_contexts.get(session_id, []))
-                    response_text = await _llm_respond("info", text_input, [], history=history)
+                    response_text = await _llm_respond("info", text_input, [], history=ctx_history)
                     ctx = _info_contexts.setdefault(session_id, deque(maxlen=_INFO_CTX_SIZE))
                     ctx.append({"role": "user", "content": text_input})
                     ctx.append({"role": "assistant", "content": response_text})
-                    reminder = {
-                        "awaiting_name": "Pour finaliser votre commande, pourriez-vous me donner votre nom et prénom ?",
-                        "awaiting_phone": "Pourriez-vous me donner votre numéro de téléphone pour finaliser votre commande ?",
-                        "awaiting_payment": "Souhaitez-vous régler par carte bancaire (CB) ou en liquide ?",
-                    }.get(session.step, "")
+                    reminder = _REMINDER.get(session.step, "")
                     combined = f"{response_text}\n\nEt pour votre commande en cours : {reminder}" if reminder else response_text
                     audio = await _call_tts(combined, skip_tts)
                     intent_label = "commande_complexe" if session.is_complex else "commande_simple"
@@ -545,6 +551,56 @@ async def _process_request(
                         transcript=text_input, intent=intent_label,
                         order_items=to_order_items(session.basket),
                         response_text=combined,
+                        audio_base64=_audio_b64(audio),
+                        session_id=session.session_id,
+                        order_step=session.step,
+                        order_total=session.total,
+                    )
+
+                if intent_raw == "panier":
+                    reminder = _REMINDER.get(session.step, "")
+                    response_text = (
+                        f"Votre panier : {format_basket(session.basket)} — total estimé : {session.total:.2f} €."
+                        + (f" {reminder}" if reminder else "")
+                    )
+                    audio = await _call_tts(response_text, skip_tts)
+                    intent_label = "commande_complexe" if session.is_complex else "commande_simple"
+                    return AgentResponse(
+                        transcript=text_input, intent=intent_label,
+                        order_items=to_order_items(session.basket),
+                        response_text=response_text,
+                        audio_base64=_audio_b64(audio),
+                        session_id=session.session_id,
+                        order_step=session.step,
+                        order_total=session.total,
+                    )
+
+                if intent_raw == "suppression":
+                    items_to_remove = data.get("order_items") or []
+                    removed_parts = []
+                    for item in items_to_remove:
+                        name = item.get("produit", "")
+                        if name:
+                            session.basket = remove_item(session.basket, name)
+                            removed_parts.append(name)
+                    session.total = compute_total(session.basket, MENU_CATALOG)
+                    session.is_complex = total_units(session.basket) > _ORDER_COMPLEXITY_THRESHOLD
+                    removed_str = ", ".join(removed_parts) if removed_parts else "l'article"
+                    reminder = _REMINDER.get(session.step, "")
+                    if session.basket:
+                        response_text = (
+                            f"J'ai retiré {removed_str} de votre commande. "
+                            f"Panier : {format_basket(session.basket)} — total estimé : {session.total:.2f} €."
+                            + (f" {reminder}" if reminder else "")
+                        )
+                    else:
+                        response_text = "Votre panier est maintenant vide. Souhaitez-vous commander autre chose ?"
+                    audio = await _call_tts(response_text, skip_tts)
+                    intent_label = "commande_complexe" if session.is_complex else "commande_simple"
+                    return AgentResponse(
+                        transcript=text_input, intent=intent_label,
+                        order_items=to_order_items(session.basket),
+                        response_text=response_text,
                         audio_base64=_audio_b64(audio),
                         session_id=session.session_id,
                         order_step=session.step,
@@ -560,15 +616,11 @@ async def _process_request(
                         session.total = compute_total(session.basket, MENU_CATALOG)
                         session.is_complex = total_units(session.basket) > _ORDER_COMPLEXITY_THRESHOLD
                     added_str = ", ".join(f"{i['quantite']}× {i['produit']}" for i in new_items)
-                    reminder = {
-                        "awaiting_name": "Pour finaliser, pourriez-vous me donner votre nom et prénom ?",
-                        "awaiting_phone": "Pourriez-vous me donner votre numéro de téléphone ?",
-                        "awaiting_payment": "Souhaitez-vous régler par carte bancaire (CB) ou en liquide ?",
-                    }.get(session.step, "")
+                    reminder = _REMINDER.get(session.step, "")
                     response_text = (
                         f"J'ai ajouté {added_str} à votre commande. "
-                        f"Panier : {format_basket(session.basket)} — total estimé : {session.total:.2f} €. "
-                        f"{reminder}"
+                        f"Panier : {format_basket(session.basket)} — total estimé : {session.total:.2f} €."
+                        + (f" {reminder}" if reminder else "")
                     )
                     audio = await _call_tts(response_text, skip_tts)
                     intent_label = "commande_complexe" if session.is_complex else "commande_simple"
@@ -587,8 +639,10 @@ async def _process_request(
             return await _handle_session_step(session, text_input, skip_tts)
 
     # ── Pas de session : classification + réponse ────────────────────────────
+    # L'historique info permet de résoudre les références pronominales ("j'en veux 4")
+    pre_history = list(_info_contexts.get(session_id, [])) if session_id else None
     try:
-        data = await _llm_classify(text_input)
+        data = await _llm_classify(text_input, history=pre_history or None)
     except Exception as exc:
         logger.error("classify_error", error=str(exc)[:200])
         return AgentResponse(
@@ -624,6 +678,18 @@ async def _process_request(
             session_id=sid,
             order_step="awaiting_name",
             order_total=total,
+        )
+
+    # Gérer "panier" et "suppression" sans session active
+    if intent_raw in ("panier", "suppression"):
+        response_text = "Vous n'avez pas de commande en cours. Souhaitez-vous passer une commande ?"
+        audio = await _call_tts(response_text, skip_tts)
+        return AgentResponse(
+            transcript=text_input, intent="autre",
+            order_items=[],
+            response_text=response_text,
+            audio_base64=_audio_b64(audio),
+            session_id=session_id,
         )
 
     intent = intent_raw if intent_raw in ("info", "autre") else "autre"

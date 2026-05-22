@@ -1,0 +1,14 @@
+{
+  "name": "Résolution de référence pronominale",
+  "description": "Le client demande le prix du rougail saucisse, puis dit 'j'en voudrais 4' — l'agent doit résoudre 'en' grâce à l'historique et NE PAS halluciner un autre plat.",
+  "turns": [
+    {"user": "Combien coûte le rougail saucisse des îles ?"},
+    {"user": "J'en voudrais 4 s'il vous plaît."},
+    {"user": "Pierre Durand, 06 12 34 56 78"},
+    {"user": "En liquide"}
+  ],
+  "expected": {
+    "item_in_basket": "rougail",
+    "item_not_in_basket": "quiche"
+  }
+}

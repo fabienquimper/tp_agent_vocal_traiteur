@@ -17,9 +17,16 @@ def add_item(basket: dict[str, int], product: str, qty: int) -> dict[str, int]:
 
 
 def remove_item(basket: dict[str, int], product: str) -> dict[str, int]:
-    """Supprime un article du panier (ignoré s'il n'y est pas)."""
+    """Supprime un article du panier — correspondance exacte puis par sous-chaîne.
+
+    Le LLM peut retourner un nom partiel (ex : "quiche lorraine" alors que le panier
+    contient "quiche lorraine (8 parts)") : on accepte la correspondance partielle.
+    """
     key = _normalize(product)
-    return {k: v for k, v in basket.items() if k != key}
+    if key in basket:
+        return {k: v for k, v in basket.items() if k != key}
+    to_remove = {k for k in basket if key in k or k in key}
+    return {k: v for k, v in basket.items() if k not in to_remove}
 
 
 def set_item(basket: dict[str, int], product: str, qty: int) -> dict[str, int]:

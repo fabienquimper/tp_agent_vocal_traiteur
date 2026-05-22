@@ -1,0 +1,13 @@
+{
+  "name": "Consultation du panier en cours",
+  "description": "Le client commence une commande, puis demande à voir son panier. L'agent doit retourner le récapitulatif des articles sans modifier l'état de la commande.",
+  "turns": [
+    {"user": "Je commande 2 bœufs bourguignons et 1 gratin dauphinois"},
+    {"user": "Quel est mon panier ?"},
+    {"user": "Sophie Legrand, 06 98 76 54 32"},
+    {"user": "En liquide"}
+  ],
+  "expected": {
+    "basket_must_contain": "bœuf"
+  }
+}
