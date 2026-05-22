@@ -44,7 +44,7 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 
 from .factory import create_stt_provider, create_llm_provider
 from .logging_config import setup_logging, get_logger, log_stt_event, log_llm_event, log_order_event, maybe_log_transcript
-from .basket import from_order_items, to_order_items, compute_total, total_units, format_basket, add_item, remove_item
+from .basket import from_order_items, to_order_items, compute_total, total_units, format_basket, add_item, remove_item, set_item
 from .excel_export import write_order
 
 # ── Initialisation du logging ──────────────────────────────────────────────────
@@ -607,6 +607,37 @@ async def _process_request(
                         order_total=session.total,
                     )
 
+                if intent_raw == "modification":
+                    items_to_modify = data.get("order_items") or []
+                    for item in items_to_modify:
+                        name = item.get("produit", "")
+                        qty = int(item.get("quantite", 1))
+                        if name:
+                            session.basket = set_item(session.basket, name, qty)
+                    session.total = compute_total(session.basket, MENU_CATALOG)
+                    session.is_complex = total_units(session.basket) > _ORDER_COMPLEXITY_THRESHOLD
+                    modified_str = ", ".join(f"{i['quantite']}× {i['produit']}" for i in items_to_modify) if items_to_modify else "l'article"
+                    reminder = _REMINDER.get(session.step, "")
+                    if session.basket:
+                        response_text = (
+                            f"Quantité mise à jour : {modified_str}. "
+                            f"Panier : {format_basket(session.basket)} — total estimé : {session.total:.2f} €."
+                            + (f" {reminder}" if reminder else "")
+                        )
+                    else:
+                        response_text = "Votre panier est maintenant vide. Souhaitez-vous commander autre chose ?"
+                    audio = await _call_tts(response_text, skip_tts)
+                    intent_label = "commande_complexe" if session.is_complex else "commande_simple"
+                    return AgentResponse(
+                        transcript=text_input, intent=intent_label,
+                        order_items=to_order_items(session.basket),
+                        response_text=response_text,
+                        audio_base64=_audio_b64(audio),
+                        session_id=session.session_id,
+                        order_step=session.step,
+                        order_total=session.total,
+                    )
+
                 if intent_raw == "commande":
                     new_items = data.get("order_items") or []
                     if new_items:
@@ -681,7 +712,7 @@ async def _process_request(
         )
 
     # Gérer "panier" et "suppression" sans session active
-    if intent_raw in ("panier", "suppression"):
+    if intent_raw in ("panier", "suppression", "modification"):
         response_text = "Vous n'avez pas de commande en cours. Souhaitez-vous passer une commande ?"
         audio = await _call_tts(response_text, skip_tts)
         return AgentResponse(

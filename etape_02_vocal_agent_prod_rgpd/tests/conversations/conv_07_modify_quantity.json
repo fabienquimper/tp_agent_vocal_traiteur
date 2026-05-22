@@ -1,0 +1,15 @@
+{
+  "name": "Modification de quantité",
+  "description": "Le client commande 4 rougails puis demande à n'en garder que 3 — l'agent doit utiliser set_item (quantité absolue) et non add_item ou remove_item.",
+  "turns": [
+    {"user": "Je voudrais 4 rougails saucisse s'il vous plaît"},
+    {"user": "Finalement gardes-en que 3, pas 4"},
+    {"user": "Marie Lefebvre, 06 55 44 33 22"},
+    {"user": "En liquide"}
+  ],
+  "expected": {
+    "final_quantity": 3,
+    "item": "rougail",
+    "total_eur": 39.0
+  }
+}

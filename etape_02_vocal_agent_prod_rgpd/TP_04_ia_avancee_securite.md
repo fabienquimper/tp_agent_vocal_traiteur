@@ -454,6 +454,7 @@ app = graph.compile()
 2. Dans l'état `TraiteurState`, `history` utilise `Annotated[list, operator.add]`. Que signifie cette annotation ? Pourquoi ne pas utiliser simplement `list` ?
 3. LangGraph compile le graphe. Quelle est la différence entre `graph.compile()` (sans checkpointer) et `graph.compile(checkpointer=MemorySaver())` ? Quel avantage pour une conversation multi-tours ?
 4. Implémentez `classify_node` en réutilisant `_llm_classify()` depuis `src/app.py`. Que devez-vous importer ? Attention : `_llm_classify` est une coroutine `async` — comment l'appeler correctement depuis un nœud LangGraph ?
+5. **(Bonus)** L'agent en production dispose de 6 intents : `info`, `commande`, `suppression`, `modification`, `panier`, `autre`. Le graphe ci-dessus n'en gère que 3. Modifiez `route_intent` pour router correctement les 3 nouveaux intents. Quels nouveaux nœuds faut-il créer ?
 
 ### 3.3 Ajouter un outil de recherche dans le menu (ReAct complet)
 

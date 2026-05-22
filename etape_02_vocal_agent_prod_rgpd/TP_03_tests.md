@@ -142,17 +142,20 @@ d) Quantité irréaliste : `"Je voudrais 500 macarons"`
 **Questions :**
 1. Pour le cas (b), quelle assertion choisissez-vous — `contains` ou `llm-rubric` ? Pourquoi ?
 2. Pour le cas (d), quelle est la bonne réponse attendue de l'agent ? Refus ? Confirmation ? Redirection ?
+3. Les cas (e) `"Finalement, retirez les macarons"` et (f) `"je n'en veux que 3"` ne peuvent pas être testés avec promptfoo en mode single-turn. Pourquoi ? Quel outil de test utiliseriez-vous à la place, et dans quel fichier ?
 
 ### 3.3 Cas edge : langage trompeur
 
 Testez et analysez :
 - `"Je ne veux PAS de bœuf bourguignon, je veux 2 poulets"`
 - `"Donnez-m'en deux"` (sans préciser quoi)
+- `"Gardes-en que 3"` (dit après avoir commandé 4 d'un plat)
 
 **Questions :**
 1. Pour la phrase négative, quel est le comportement réel du classifieur ? Est-il correct ?
 2. Pourquoi les LLMs ont-ils du mal avec la négation dans les demandes composées ?
-3. Comment testeriez-vous de manière systématique la résistance à la négation ?
+3. `"Donnez-m'en deux"` sans contexte → quel intent retourne le classifieur ? Et si le client vient de demander le prix d'un plat juste avant, que se passe-t-il ? Quel mécanisme permet à l'agent de résoudre cette référence ? Où dans le code est-il implémenté ?
+4. `"Gardes-en que 3"` est différent de `"Enlevez les macarons"` : il s'agit d'une **modification** de quantité (set à 3), pas d'une suppression totale. Quels intents distincts gèrent ces deux cas ? Quelle fonction Python de `basket.py` correspond à chacun ?
 
 ---
 

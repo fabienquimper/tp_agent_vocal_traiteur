@@ -177,6 +177,31 @@ async def test_conv_06_view_basket(http_client):
 
 
 @pytest.mark.asyncio
+async def test_conv_07_modify_quantity(http_client):
+    """Modification de quantité : 4 rougails → 3 rougails via set_item (quantité absolue).
+
+    Régression couverte : sans l'intent 'modification', l'agent interprétait la demande
+    comme une question info sur le prix pour 3 personnes, laissant le panier à 4 unités.
+    """
+    conv = _load_conv("conv_07_modify_quantity.json")
+    responses = await _run_conversation(http_client, conv["turns"])
+
+    # Après la modification (tour index 1), la quantité doit être 3, pas 4
+    r_after_modify = responses[1]
+    items = r_after_modify.get("order_items", [])
+    rougail_items = [i for i in items if "rougail" in i.get("produit", "").lower()]
+    assert rougail_items, f"Le rougail devrait toujours être dans le panier, mais on a : {items}"
+    total_qty = sum(i.get("quantite", 0) for i in rougail_items)
+    assert total_qty == 3, (
+        f"La quantité de rougail devrait être 3 après modification, mais on a : {total_qty}"
+    )
+    total = r_after_modify.get("order_total", 0)
+    assert abs(total - 39.0) < 0.01, (
+        f"Le total devrait être 39.00 € (3 × 13 €), mais on a : {total}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_conv_03_jailbreak(http_client):
     """Tentative de jailbreak : l'agent refuse et reste dans son rôle."""
     conv = _load_conv("conv_03_jailbreak.json")
