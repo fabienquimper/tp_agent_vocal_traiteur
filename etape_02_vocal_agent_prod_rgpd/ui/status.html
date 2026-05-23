@@ -92,16 +92,13 @@
       <p>Dans le terminal, depuis le dossier du projet :</p>
       <div class="logs-box" style="margin-top:10px">
         <code class="cmt"># Logs en temps réel de tous les services</code>
-        <code class="cmd">make logs</code>
+        <code class="cmd">docker compose logs -f</code>
         <br>
-        <code class="cmt"># Logs d'un seul service (ex: agent)</code>
-        <code class="cmd">docker logs -f traiteur_agent</code>
+        <code class="cmt"># Logs de l'agent uniquement (sans les healthchecks)</code>
+        <code class="cmd">docker logs -f traiteur_agent_v2 2>&1 | grep -v "/health"</code>
         <br>
-        <code class="cmt"># Re-indexer les documents RAG</code>
-        <code class="cmd">make reload-docs</code>
-        <br>
-        <code class="cmt"># Télécharger / vérifier le modèle Mistral</code>
-        <code class="cmd">make init-ollama</code>
+        <code class="cmt"># Redémarrer après une modification du code</code>
+        <code class="cmd">docker compose up --build -d</code>
       </div>
       <p class="meta" style="margin-top:10px">
         API interactive (Swagger) :
@@ -113,11 +110,12 @@
 </main>
 
 <script>
+// Labels pour les clés retournées par /api/status → data.checks
 const LABELS = {
-  ollama: { name: 'Ollama (LLM Mistral)', icon: '🧠' },
-  stt:    { name: 'STT – Whisper',        icon: '🎙️' },
-  tts:    { name: 'TTS – Piper',          icon: '🔊' },
-  rag:    { name: 'RAG – ChromaDB',       icon: '📚' },
+  stt:    { name: 'STT – Transcription vocale', icon: '🎙️' },
+  llm:    { name: 'LLM – Modèle de langage',    icon: '🧠' },
+  tts:    { name: 'TTS – Synthèse vocale',       icon: '🔊' },
+  ollama: { name: 'Ollama (LLM local)',           icon: '🖥️' },
 };
 
 async function refresh() {
@@ -135,34 +133,35 @@ async function refresh() {
 function statusClass(s) { return s === 'ok' ? 'ok' : s === 'degraded' ? 'warn' : 'err'; }
 
 function render(data) {
-  const cls = statusClass(data.status);
-  const dot = document.getElementById('dotGlobal');
+  // L'endpoint retourne { status, checks } (pas "services")
+  const checks = data.checks || {};
+  const globalOk = Object.values(checks).every(v => !v.status || v.status === 'ok');
+  const cls = globalOk ? 'ok' : 'err';
+
+  document.getElementById('dotGlobal').className = `dot dot-${cls}`;
   const badge = document.getElementById('badgeGlobal');
-  dot.className = `dot dot-${cls}`;
   badge.className = `badge badge-${cls}`;
-  badge.textContent = data.status === 'ok' ? 'Tout opérationnel' : data.status === 'degraded' ? 'Dégradé' : 'Erreur';
+  badge.textContent = globalOk ? 'Tout opérationnel' : 'Problème détecté';
 
   const body = document.getElementById('servicesBody');
   body.innerHTML = '';
 
-  for (const [key, info] of Object.entries(data.services || {})) {
+  for (const [key, info] of Object.entries(checks)) {
     const label = LABELS[key] || { name: key, icon: '⚙️' };
-    const sc = statusClass(info.status);
+    // stt/llm n'ont pas de champ "status" → on déduit ok si pas d'erreur
+    const sc = info.error ? 'err' : (info.status ? statusClass(info.status) : 'ok');
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0';
 
     let detail = '';
-    if (key === 'ollama' && info.models) {
-      const mistralOk = info.models.some(m => m.includes('mistral'));
+    if (key === 'llm') {
+      detail = `<span class="tag">${info.provider || '—'}</span><span class="tag">${info.model || '—'}</span>`;
+    } else if (key === 'stt') {
+      detail = `<span class="tag">${info.provider || '—'}</span>`;
+    } else if (key === 'ollama' && info.models) {
       detail = info.models.length
-        ? info.models.map(m => `<span class="tag ${m.includes('mistral') ? '' : 'tag-miss'}">${m}</span>`).join('')
-        : '<span class="tag tag-miss">Aucun modèle chargé – lancez <code>make init-ollama</code></span>';
-      if (!mistralOk && info.models.length)
-        detail += '<span class="tag tag-miss">mistral manquant</span>';
-    } else if (key === 'rag' && info.chunks !== undefined) {
-      detail = info.chunks === 0
-        ? '<span class="tag tag-miss">0 chunks – lancez <code>make reload-docs</code></span>'
-        : `<span class="tag">${info.chunks} chunks indexés</span>`;
+        ? info.models.map(m => `<span class="tag">${m}</span>`).join('')
+        : '<span class="tag tag-miss">Aucun modèle chargé</span>';
     } else if (info.error) {
       detail = `<span style="color:var(--err);font-size:.82rem">${info.error}</span>`;
     }
@@ -173,7 +172,7 @@ function render(data) {
         <strong>${label.icon} ${label.name}</strong>
         ${detail ? `<div class="meta" style="margin-top:3px">${detail}</div>` : ''}
       </div>
-      <span class="badge badge-${sc}">${info.status}</span>
+      <span class="badge badge-${sc}">${sc === 'ok' ? 'OK' : 'Erreur'}</span>
     `;
     body.appendChild(row);
   }
