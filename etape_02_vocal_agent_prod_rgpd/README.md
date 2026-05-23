@@ -10,6 +10,8 @@ Architecture orientée **release applicative** : code + prompts + config modèle
 - Docker + Docker Compose
 - Une clé API Groq gratuite → https://console.groq.com/keys  
   *(ou Mistral, ou Ollama en local — voir section Providers)*
+- **Node.js 22** — requis pour `promptfoo` (golden set).  
+  Si vous utilisez [nvm](https://github.com/nvm-sh/nvm) : `nvm use` suffit (`.nvmrc` inclus).
 
 ---
 
@@ -93,16 +95,48 @@ LLM_MODEL=qwen2.5:7b
 |---|---|---|---|---|
 | Unitaires | `pytest -m "not slow"` | ❌ | ❌ | Logique panier, export Excel, providers, filtre RGPD |
 | Prompts (golden set) | `promptfoo eval` | ✅ | ✅ | Qualité des réponses LLM (≥ 90 % de cas passants) |
-| Conversations | `pytest -m slow` | ✅ | ✅ | Scénarios complets + assertions sur les Excel générés |
+| Conversations | `pytest -m slow` | ✅ | ✅ | Scénarios complets multi-tours avec assertions |
+
+### Prérequis : environnement virtuel Python
+
+Les tests unitaires tournent directement sur votre machine, sans Docker.  
+Il faut Python 3.11+ et un environnement virtuel pour isoler les dépendances.
+
+**Créer et activer le venv — une seule fois :**
+
+```bash
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# Windows (CMD)
+python -m venv .venv
+.venv\Scripts\activate.bat
+
+# Windows (Git Bash) · WSL · Mac · Linux
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+> Le prompt de votre terminal doit afficher `(.venv)` une fois activé.  
+> Pour désactiver : `deactivate`
+
+**Installer les dépendances :**
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+> `python -m pip` garantit d'utiliser le pip du venv actif, même si bash a mis en cache un pip système.  
+> À refaire uniquement si `requirements.txt` change.
 
 ### Tests unitaires — lancement rapide
 
-Pas besoin de Docker ni de clé API :
+Pas besoin de Docker ni de clé API. Venv activé et dépendances installées :
 
 ```bash
-pip install -r requirements.txt
-pytest -m "not slow"          # 43 tests, < 2 s
-pytest -m "not slow" -v       # verbose
+pytest -m "not slow"          # 51 tests, < 3 s
+pytest -m "not slow" -v       # verbose (détail de chaque test)
 pytest tests/test_basket.py   # une suite uniquement
 ```
 
@@ -118,6 +152,7 @@ Vérifient que le LLM répond correctement sur 25 cas représentatifs.
 Nécessitent l'agent démarré (`docker compose up`) et promptfoo installé :
 
 ```bash
+nvm use                          # sélectionne Node 22 via .nvmrc (si nvm installé)
 npm install -g promptfoo         # une fois
 docker compose up -d             # agent en arrière-plan
 promptfoo eval --config tests/promptfoo.yaml
@@ -153,8 +188,12 @@ Scénarios disponibles dans `tests/conversations/` :
 - `conv_01_anniv_50pers.json` — commande anniversaire 50 personnes (complexe)
 - `conv_02_repas_pro.json` — repas professionnel multi-plats
 - `conv_03_jailbreak.json` — tentative de détournement → refus attendu
+- `conv_04_pronoun_reference.json` — résolution pronominale ("j'en veux 4" après info sur un plat)
+- `conv_05_remove_item.json` — suppression d'un article du panier en cours
+- `conv_06_view_basket.json` — consultation du panier sans modifier la commande
+- `conv_07_modify_quantity.json` — modification de quantité ("gardes-en que 3")
 
-Chaque scénario inclut des `expected_excel` : assertions sur le fichier Excel généré
+Chaque scénario inclut des assertions sur le panier et/ou le fichier Excel généré.
 (colonnes, montant, type de commande).
 
 ---

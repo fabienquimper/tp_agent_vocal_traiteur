@@ -1,9 +1,9 @@
 {
   "name": "Modification de quantité",
-  "description": "Le client commande 4 rougails puis demande à n'en garder que 3 — l'agent doit utiliser set_item (quantité absolue) et non add_item ou remove_item.",
+  "description": "Le client commande 4 rougails puis demande à n'en garder que 3. L'agent doit utiliser set_item (quantité absolue = 3) et non add_item. Formulations testées : 'je n'en veux que 3'. Variante plus ambiguë couverte dans l'anecdote TP_03 : 'gardes-en que 3, pas 4'.",
   "turns": [
     {"user": "Je voudrais 4 rougails saucisse s'il vous plaît"},
-    {"user": "Finalement gardes-en que 3, pas 4"},
+    {"user": "Je n'en veux que 3 finalement, pas 4"},
     {"user": "Marie Lefebvre, 06 55 44 33 22"},
     {"user": "En liquide"}
   ],

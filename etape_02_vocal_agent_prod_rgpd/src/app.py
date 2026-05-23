@@ -526,10 +526,16 @@ async def _process_request(
     if session_id:
         session = _get_session(session_id)
         if session and session.step not in ("complete",):
-            # Classifier avec historique pour résoudre les références pronominales
+            # Classifier avec historique + panier pour résoudre les références pronominales
+            # ("Je n'en veux que 3" → le LLM sait ce que "en" désigne grâce au panier)
             try:
-                ctx_history = list(_info_contexts.get(session_id, []))
-                data = await _llm_classify(text_input, history=ctx_history or None)
+                ctx_history = list(_info_contexts.get(session_id, []))[-3:]
+                if session.basket:
+                    basket_hint = {"role": "assistant", "content": f"Panier en cours : {format_basket(session.basket)}"}
+                    classify_history = [basket_hint] + ctx_history
+                else:
+                    classify_history = ctx_history
+                data = await _llm_classify(text_input, history=classify_history or None)
                 intent_raw = data.get("intent", "autre")
 
                 _REMINDER = {
@@ -609,6 +615,12 @@ async def _process_request(
 
                 if intent_raw == "modification":
                     items_to_modify = data.get("order_items") or []
+                    # Fallback : produit non résolu + panier à un seul article → appliquer à cet article
+                    if session.basket and not any(i.get("produit") for i in items_to_modify):
+                        if len(session.basket) == 1:
+                            sole = next(iter(session.basket))
+                            qty = int(items_to_modify[0]["quantite"]) if items_to_modify else 1
+                            items_to_modify = [{"produit": sole, "quantite": qty}]
                     for item in items_to_modify:
                         name = item.get("produit", "")
                         qty = int(item.get("quantite", 1))

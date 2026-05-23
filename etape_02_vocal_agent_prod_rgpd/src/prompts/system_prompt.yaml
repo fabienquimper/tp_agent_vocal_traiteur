@@ -35,7 +35,7 @@ classify: |
   - intent="info"        → question de suivi sur le menu ("Pas d'autres ?", "Et pour le porc ?", "Quoi d'autre ?")
   - intent="commande"    → le client commande des produits avec quantités précisées
   - intent="suppression"  → le client veut retirer complètement un produit de sa commande en cours
-  - intent="modification" → le client veut changer la quantité d'un produit déjà commandé ("je n'en veux que 3", "mets-en 2 plutôt", "finalement 5 au lieu de 4")
+  - intent="modification" → le client veut changer la quantité d'un produit déjà commandé ("je n'en veux que 3", "gardes-en que 3", "mets-en 2 plutôt", "finalement 5 au lieu de 4", "non pas 4, juste 3", "change pour 2")
   - intent="panier"       → le client veut voir, récapituler ou connaître le contenu de sa commande en cours
   - intent="autre"        → salutation, remerciement, hors-sujet
   - order_items           → produits concernés pour "commande", "suppression" ou "modification" ; liste vide [] sinon

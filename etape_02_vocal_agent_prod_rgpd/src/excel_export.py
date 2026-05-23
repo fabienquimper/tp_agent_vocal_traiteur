@@ -19,6 +19,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 def _get_orders_dir() -> str:
     return os.getenv("ORDERS_DIR", "/app/orders")
 
+ORDERS_DIR = _get_orders_dir()
+
 HEADERS = ["Réf.", "Date", "Heure", "Nom", "Prénom", "Téléphone", "Articles", "Total (€)", "Paiement", "Statut"]
 COLUMN_WIDTHS = [10, 12, 8, 16, 16, 16, 50, 12, 22, 22]
 
