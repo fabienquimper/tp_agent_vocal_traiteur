@@ -526,6 +526,12 @@ async def _process_request(
     if session_id:
         session = _get_session(session_id)
         if session and session.step not in ("complete",):
+            # Fast path paiement : détecter CB/liquide sans passer par le LLM.
+            # Le LLM peut classer "CB" comme intent="panier" et court-circuiter
+            # _handle_session_step avant que _detect_payment_method soit appelé.
+            if session.step == "awaiting_payment" and _detect_payment_method(text_input):
+                return await _handle_session_step(session, text_input, skip_tts)
+
             # Classifier avec historique + panier pour résoudre les références pronominales
             # ("Je n'en veux que 3" → le LLM sait ce que "en" désigne grâce au panier)
             try:

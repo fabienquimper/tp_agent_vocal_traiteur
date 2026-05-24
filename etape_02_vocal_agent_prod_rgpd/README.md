@@ -300,6 +300,33 @@ tests/
 
 ---
 
+## Dépannage
+
+### Port 8000 déjà utilisé au démarrage
+
+```
+failed to bind host port 0.0.0.0:8000/tcp: address already in use
+```
+
+Les services ont `restart: unless-stopped` : Docker les relance automatiquement au démarrage
+de la machine, même sans `docker compose up` explicite. Si un conteneur d'une session
+précédente n'a pas été supprimé proprement, il reprend le port au boot.
+
+**Bonne pratique :** toujours terminer avec `docker compose down` plutôt que `Ctrl+C`.
+Le `Ctrl+C` arrête les conteneurs mais les laisse enregistrés avec la politique de restart.
+
+```bash
+# Stopper et supprimer les conteneurs proprement
+docker compose down
+
+# Si le port reste bloqué (proxy Docker fantôme), identifier le processus :
+ss -tlnp sport = :8000
+# Puis tuer le docker-proxy correspondant :
+sudo kill <PID>
+```
+
+---
+
 ## Conformité RGPD / AI Act
 
 - **AI Act art. 50** : l'agent annonce qu'il est une IA à chaque ouverture de session.
