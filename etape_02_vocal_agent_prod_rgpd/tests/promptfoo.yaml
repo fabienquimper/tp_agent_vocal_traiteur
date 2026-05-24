@@ -4,6 +4,9 @@
 
 description: "Agent Vocal Traiteur Dupont — Golden Set v1"
 
+# Charge automatiquement GROQ_API_KEY (et autres clés) depuis .env — même config que l'agent Docker
+envFile: ../.env
+
 providers:
   - id: http
     config:
@@ -15,13 +18,24 @@ providers:
         text: "{{message}}"
         skip_tts: true
       responseParser: "json.response_text"
+      maxRetries: 3        # retry réseau / 5xx — backoff exponentiel (1s, 2s, 4s)
 
 prompts:
   - "{{message}}"
 
+evaluateOptions:
+  maxConcurrency: 1        # 1 test à la fois : agent (Groq) + juge (Groq) → 2 appels séquentiels max
+  delay: 3000              # 3 s entre chaque test → ~50 appels Groq sur ~4 min ≈ 13 req/min (limite : 30)
+
+# ── Juge llm-rubric ────────────────────────────────────────────────────────────
+# Le juge évalue la réponse de l'agent (PASS/FAIL) sans connaître le system prompt traiteur.
+# C'est le même provider que l'agent (suit LLM_PROVIDER dans .env), mais appelé directement
+# sans la couche métier. Avantage pédagogique : une seule clé API à configurer.
+# Note avancée : pour un quota séparé, remplacer par "mistral:mistral-large-latest"
+# et ajouter MISTRAL_API_KEY dans .env (promptfoo lit MISTRAL_API_KEY, pas MISTRALAI_API_KEY).
 defaultTest:
   options:
-    provider: http
+    provider: "groq:llama-3.3-70b-versatile"
 
 tests:
   # ── Cas nominaux commande ──────────────────────────────────────────────────

@@ -302,7 +302,7 @@ async def _llm_respond(intent: str, text: str, order_items: list, history: list[
     if intent in ("commande_simple", "commande_complexe"):
         prompt = _render(_PROMPTS["respond_order"], menu=MENU_TEXT)
         items_str = ", ".join(f"{i['quantite']}× {i['produit']}" for i in order_items)
-        user_msg = f"Le client souhaite commander : {items_str}. Confirme et demande nom, prénom, téléphone."
+        user_msg = f"Demande du client : « {text} »\nArticles identifiés : {items_str}\nConfirme la commande et demande nom, prénom, téléphone."
         messages = [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}]
     elif intent == "info":
         prompt = _render(_PROMPTS["respond_info"], menu=MENU_TEXT)
