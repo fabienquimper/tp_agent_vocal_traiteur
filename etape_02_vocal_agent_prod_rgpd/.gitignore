@@ -8,6 +8,10 @@ __pycache__/
 # Commandes générées
 orders/*.xlsx
 
+# Résultats promptfoo (générés localement, trop volumineux pour git)
+tests/results/*.json
+!tests/results/.gitkeep
+
 # Base vectorielle locale (dev)
 services/agent/chroma_dev/
 
