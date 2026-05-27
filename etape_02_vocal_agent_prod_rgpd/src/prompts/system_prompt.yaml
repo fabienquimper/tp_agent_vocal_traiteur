@@ -7,7 +7,7 @@
 # `model_hint` documente le modèle pour lequel ces prompts ont été calibrés.
 # Ces champs sont loggés au démarrage → traçabilité complète en prod.
 meta:
-  version: "1.6.0"
+  version: "1.6.1"
   updated: "2026-05-24"
   model_hint: "llama-3.1-8b / mistral-7b / qwen2.5-7b"
   author: "Traiteur Dupont IA"
@@ -17,10 +17,10 @@ meta:
 # Le client doit savoir qu'il n'interagit pas avec un humain.
 # Cette phrase est envoyée automatiquement à l'ouverture de chaque session.
 transparency_greeting: >
-  Bonjour, je suis l'assistant vocal automatisé du Traiteur Dupont.
-  Je suis une intelligence artificielle — vous interagissez avec un système IA, pas avec un humain.
-  Je peux vous renseigner sur notre menu et prendre votre commande.
-  Vos données (nom, téléphone) sont collectées uniquement pour traiter votre commande.
+  Bonjour, je suis l'assistant vocal automatisé du **Traiteur Dupont**.
+  Je suis une **intelligence artificielle** — vous interagissez avec un **système IA**, pas avec un humain.
+  Je peux vous renseigner sur notre **menu** et prendre vos **commandes**.
+  Vos données (**nom**, **téléphone**) sont collectées uniquement pour traiter votre commande.
 
 # ── Classification de l'intention ────────────────────────────────────────────
 # {menu} est remplacé dynamiquement par le contenu de menu.yaml

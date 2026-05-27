@@ -796,6 +796,12 @@ def health():
     return {"status": "ok", "service": "agent"}
 
 
+@app.get("/api/greeting")
+def get_greeting():
+    """AI Act art. 50 — retourne le message de transparence configuré dans system_prompt.yaml."""
+    return {"text": _PROMPTS["transparency_greeting"].strip()}
+
+
 @app.get("/metrics")
 def metrics():
     """Endpoint Prometheus — scraped par prometheus/grafana."""

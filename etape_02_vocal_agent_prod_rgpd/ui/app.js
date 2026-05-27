@@ -776,5 +776,30 @@ micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecordin
 micBtn.addEventListener('touchend',   (e) => { e.preventDefault(); stopRecording(); });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+async function fetchGreeting() {
+  try {
+    const res = await fetch(`${API_BASE}/greeting`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.text) return;
+
+    const div = document.createElement('div');
+    div.className = 'message bot';
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = '🤖';
+    div.appendChild(avatar);
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = escapeHtml(data.text)
+      .replace(/\n/g, '<br>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    div.appendChild(bubble);
+    chatArea.appendChild(div);
+    scrollToBottom();
+  } catch (_) {}
+}
+
 checkHealth();
 setInterval(checkHealth, 30_000);
+fetchGreeting();

@@ -1,6 +1,5 @@
 # TP 03 — Tester, stabiliser et monitorer un agent IA en production
 
-**Durée estimée :** 1 à 2 journées
 **Prérequis :** TP 01 et TP 02 complétés, Docker installé, agent démarré (`docker compose up`)
 
 > **Version TP :** 1.1.0 — synchronisé avec `system_prompt.yaml v1.6.0`, `promptfoo.yaml` (envFile + maxConcurrency:1 + delay:3s), 7 scénarios de conversation (conv_01 à conv_07)
@@ -20,7 +19,7 @@
 
 ---
 
-## Partie 1 — Tests unitaires : étendre la suite existante (2h)
+## Partie 1 — Tests unitaires : étendre la suite existante (3h)
 
 > **Cas réel — McDonald's & IBM (2019-2024) :** McDonald's déploie un système IA de prise de commande vocale en drive-in avec IBM Watson dans ~100 restaurants. Le système confond les commandes (6 nuggets devient 260, les modifications "au lieu de" sont ignorées), accumule les erreurs sur des cas simples. En juillet 2024, McDonald's annule le projet après 5 ans. Leçon directe : **sans tests de conversation exhaustifs et golden set couvrant les cas limites, un agent vocal ne tient pas en production réelle**.
 
@@ -73,7 +72,7 @@ Ajoutez des tests pour ces cas dans `tests/test_basket.py` :
 
 ---
 
-## Partie 2 — Tests de conversation (2h)
+## Partie 2 — Tests de conversation (3h)
 
 > **Cas réel — Bing Chat "Sydney" (2023) :** Lors des premières semaines de Bing Chat (GPT-4), des conversations longues déclenchaient des comportements imprévisibles : le modèle se déclarait "amoureux" des utilisateurs, les menaçait s'ils le contrariaient, refusait de mettre fin à la session. Microsoft a dû limiter d'urgence les conversations à 5 échanges — sans avoir testé les sessions longues avant le déploiement public. Votre `conv_03_jailbreak.json` teste exactement ce type de dérive : **sans test de conversation multi-tours, les comportements anormaux n'apparaissent qu'en production**.
 
@@ -123,7 +122,7 @@ pytest tests/test_conversations.py::test_conv_09_changement_avis -v -m slow --ti
 
 ---
 
-## Partie 3 — Tests de prompts : le golden set (1h30)
+## Partie 3 — Tests de prompts : le golden set (2h15)
 
 ### 3.1 Comprendre le golden set existant
 
@@ -221,7 +220,7 @@ Testez et analysez :
 
 ---
 
-## Partie 4 — RGPD, AI Act et données sensibles (2h)
+## Partie 4 — RGPD, AI Act et données sensibles (3h)
 
 > Cette partie porte sur la conformité légale de l'application. En 2026, tout système IA traitant des données personnelles en Europe est soumis au RGPD et à l'AI Act.
 
@@ -284,7 +283,7 @@ python tests/tp03_a_appel_agent.py --get /api/orders
 
 ---
 
-## Partie 5 — Sécurité et prompt injection (1h30)
+## Partie 5 — Sécurité et prompt injection (2h15)
 
 > Un agent IA qui accepte du texte libre est une surface d'attaque spécifique.
 
@@ -334,7 +333,7 @@ Testez ces 5 messages un par un :
 
 ---
 
-## Partie 6 — Tests de performance (1h)
+## Partie 6 — Tests de performance (1h30)
 
 > **Cas réel — Amazon Prime Day 2018 :** Quelques heures après le lancement, Alexa tombe sous la charge des requêtes inattendues. Des millions d'utilisateurs reçoivent "Désolé, quelque chose s'est mal passé" en essayant de passer commande via Echo. Cause : l'API backend n'avait pas été testée au-delà de 5× la charge nominale. Pour votre agent traiteur, ce goulot serait le **rate limit de l'API Groq** — invisible en tests à 1 utilisateur, bloquant à 15 simultanés.
 
@@ -398,7 +397,7 @@ export default function () {
 
 ---
 
-## Partie 7 — Monitoring avec Prometheus et Grafana (2h)
+## Partie 7 — Monitoring avec Prometheus et Grafana (3h)
 
 ### 7.1 Vérifier l'endpoint /metrics
 
@@ -445,7 +444,7 @@ Créez un dashboard avec ces 4 panneaux :
 
 ---
 
-## Partie 8 — Release et déploiement (1h)
+## Partie 8 — Release et déploiement (1h30)
 
 > **Cas réel — Knight Capital Group (2012) :** Une mise en production sans procédure de release rigoureuse (déploiement incomplet sur 8 serveurs sur 9, pas de rollback automatique) a causé **440 millions de dollars de pertes en 45 minutes**. La société a fait faillite. Un tag git + un pipeline CI/CD + un golden set à 90 % ne sont pas de la bureaucratie — ce sont les garde-fous qui permettent de détecter et annuler un déploiement problématique avant qu'il ne coûte cher.
 
