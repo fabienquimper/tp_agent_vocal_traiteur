@@ -1,0 +1,19 @@
+# requirements-tp04.txt — Dépendances supplémentaires pour TP 04
+#
+# À installer dans le même venv que requirements.txt, uniquement si vous faites :
+#   - Partie 3 : Agents autonomes et boucle ReAct (LangGraph)
+#   - Partie 4 : NeMo Guardrails
+#
+# Installation :
+#   pip install -r requirements-tp04.txt
+#
+# Note : ces packages ne sont pas nécessaires pour TP 01, TP 02 et TP 03.
+
+# ── Partie 3 — LangGraph / LangChain ─────────────────────────────────────────
+langgraph>=0.2
+langchain-groq>=0.2
+langchain-core>=0.3
+
+# ── Partie 4 — NeMo Guardrails ────────────────────────────────────────────────
+# Nécessite Python 3.10+ et peut prendre plusieurs minutes à installer
+nemoguardrails>=0.10

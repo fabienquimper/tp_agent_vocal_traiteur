@@ -122,6 +122,23 @@ body {
   color: var(--text-muted);
 }
 
+.feedback-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.btn-feedback {
+  background: none;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: .85rem;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-feedback:hover { background: rgba(0,0,0,.06); }
+.feedback-sent { font-size: .75rem; color: var(--text-muted); }
+
 /* ── Barre de statut ──────────────────────────────────────────────────────── */
 .status-bar {
   min-height: 24px;

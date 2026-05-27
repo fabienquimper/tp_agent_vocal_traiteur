@@ -90,6 +90,14 @@ _m_session_messages = Histogram(
     buckets=[1, 2, 3, 4, 5, 6, 8, 10, 15, 20],
 )
 
+# ── Métriques feedback et dérive ──────────────────────────────────────────────
+_m_feedback = Counter(
+    "traiteur_feedback_total", "Retours utilisateurs explicites", ["rating"]  # positive | negative
+)
+_m_intent_autre = Counter(
+    "traiteur_intent_autre_total", "Messages classés hors-domaine (intent=autre)"
+)
+
 # ── Métriques LLM (tokens + coûts) ────────────────────────────────────────────
 _m_llm_tokens_input = Counter(
     "traiteur_llm_tokens_input_total", "Tokens d'entrée LLM", ["provider", "model"]
@@ -221,6 +229,12 @@ class TextRequest(BaseModel):
     text: str
     session_id: Optional[str] = None
     skip_tts: bool = False
+
+
+class FeedbackRequest(BaseModel):
+    session_id: str = ""
+    rating: int                              # 1 = positif, -1 = négatif
+    comment: str = ""
 
 
 class PaymentSimulateRequest(BaseModel):
@@ -742,6 +756,11 @@ async def _process_request(
         )
 
     intent = intent_raw if intent_raw in ("info", "autre") else "autre"
+
+    if intent == "autre":
+        _m_intent_autre.inc()
+        logger.info("intent_hors_domaine", message_preview=text_input[:50] if text_input else "")
+
     history = list(_info_contexts.get(session_id, [])) if session_id and intent == "info" else None
     is_error = False
     try:
@@ -876,6 +895,22 @@ async def accept_on_site(session_id: str):
         "success": True, "order_id": order_id,
         "message": f"Commande n°{order_id} enregistrée. Montant à régler sur place : {session.total:.2f} €.",
     }
+
+
+@app.post("/api/feedback")
+async def submit_feedback(request: FeedbackRequest):
+    """Feedback utilisateur 👍/👎. RGPD : rating + 200 car. max du commentaire seulement."""
+    if request.rating not in (1, -1):
+        raise HTTPException(status_code=400, detail="rating doit être 1 ou -1")
+    label = "positive" if request.rating > 0 else "negative"
+    _m_feedback.labels(rating=label).inc()
+    logger.info(
+        "user_feedback",
+        session_id=request.session_id[:12] if request.session_id else "",
+        rating=label,
+        comment=request.comment[:200] if request.comment else "",
+    )
+    return {"status": "ok"}
 
 
 @app.get("/api/orders")

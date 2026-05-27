@@ -435,6 +435,33 @@ function addBotResponse(data) {
     bubble.appendChild(badge);
   }
 
+  // Boutons feedback 👍/👎 — affichés uniquement hors flow de commande actif
+  const noFeedbackSteps = ['awaiting_name', 'awaiting_phone', 'awaiting_card', 'complete'];
+  if (!data.is_error && !noFeedbackSteps.includes(data.order_step)) {
+    const fbEl = document.createElement('div');
+    fbEl.className = 'feedback-btns';
+    const makeBtn = (rating, emoji, title) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-feedback';
+      btn.textContent = emoji;
+      btn.title = title;
+      btn.addEventListener('click', async () => {
+        try {
+          await fetch(`${API_BASE}/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, rating, comment: '' }),
+          });
+        } catch (_) {}
+        fbEl.innerHTML = '<span class="feedback-sent">Merci !</span>';
+      });
+      return btn;
+    };
+    fbEl.appendChild(makeBtn(1, '👍', 'Réponse utile'));
+    fbEl.appendChild(makeBtn(-1, '👎', 'Réponse non utile'));
+    bubble.appendChild(fbEl);
+  }
+
   div.appendChild(bubble);
   chatArea.appendChild(div);
   scrollToBottom();
