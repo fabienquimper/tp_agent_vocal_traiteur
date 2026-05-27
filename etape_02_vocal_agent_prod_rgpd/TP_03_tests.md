@@ -109,6 +109,13 @@ Créez `tests/conversations/conv_09_changement_avis.json` :
 2. L'agent confirme et demande le nom
 3. Le client dit "Finalement, changez pour 3 poulets rôtis à la place"
 
+**Lancer uniquement ce scénario :**
+```bash
+pytest tests/test_conversations.py::test_conv_09_changement_avis -v -m slow --timeout=120
+```
+
+> **Astuce :** la syntaxe `fichier::nom_du_test` fonctionne pour n'importe quel test pytest. Pratique pour déboguer un scénario sans relancer toute la suite.
+
 **Questions :**
 1. Que fait réellement l'agent à l'étape 3 ? Est-ce un remplacement ou un ajout ?
 2. Pourquoi ce comportement est-il difficile à corriger avec un LLM sans mémoire longue ?

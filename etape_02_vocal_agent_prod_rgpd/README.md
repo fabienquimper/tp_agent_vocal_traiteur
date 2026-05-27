@@ -204,9 +204,15 @@ Scénarios disponibles dans `tests/conversations/` :
 - `conv_05_remove_item.json` — suppression d'un article du panier en cours
 - `conv_06_view_basket.json` — consultation du panier sans modifier la commande
 - `conv_07_modify_quantity.json` — modification de quantité ("gardes-en que 3")
+- `conv_09_changement_avis.json` — remplacement de panier ("à la place") — ⚠️ régression connue, marqué `xfail`
 
 Chaque scénario inclut des assertions sur le panier et/ou le fichier Excel généré.
 (colonnes, montant, type de commande).
+
+**Lancer un seul scénario :**
+```bash
+pytest tests/test_conversations.py::test_conv_09_changement_avis -v -m slow --timeout=120
+```
 
 ---
 
