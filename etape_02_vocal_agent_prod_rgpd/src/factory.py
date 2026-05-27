@@ -33,7 +33,9 @@ def create_stt_provider() -> STTProvider:
         return GroqSTTProvider(api_key=api_key, model=model)
 
     if provider == "local_ollama":
-        whisper_model = os.getenv("STT_MODEL", "base")
+        # WHISPER_MODEL = taille faster-whisper (tiny/base/small/medium/large-v2/large-v3)
+        # STT_MODEL est réservé aux providers cloud (groq, lms)
+        whisper_model = os.getenv("WHISPER_MODEL", "base")
         device = os.getenv("WHISPER_DEVICE", "cpu")
         from .providers.stt_local_ollama import LocalOllamaSTTProvider
         logger.info("stt_provider_init", provider="local_ollama", model=whisper_model, device=device)

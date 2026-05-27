@@ -56,7 +56,12 @@ class _ScrubFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = _scrub(str(record.msg))
         if record.args:
-            record.args = tuple(_scrub(str(a)) for a in record.args)
+            # Ne convertir en str que les arguments textuels — les entiers/floats
+            # (ex: code HTTP 200 formaté avec %d par httpx) doivent rester numériques.
+            record.args = tuple(
+                _scrub(a) if isinstance(a, str) else a
+                for a in record.args
+            )
         return True
 
 

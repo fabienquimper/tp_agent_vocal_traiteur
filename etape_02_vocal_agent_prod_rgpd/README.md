@@ -58,15 +58,27 @@ est testé en CI/CD.
 
 ### Mode 100 % local (sans clé API)
 
-```bash
-./scripts/setup_ollama_local.sh   # installe Ollama + pull le modèle
-# Dans .env :
-#   LLM_PROVIDER=local_ollama
-#   STT_PROVIDER=local_ollama
-docker compose up
+Aucune donnée ne quitte la machine. Un script de setup est fourni pour chaque plateforme :
+
+| Plateforme | Script |
+|------------|--------|
+| Linux | `bash scripts/setup_ollama_local.sh` |
+| WSL2 (Ollama sur Windows) | `bash scripts/setup_ollama_wsl.sh` |
+| WSL2 (Ollama dans WSL) | `bash scripts/setup_ollama_wsl.sh --wsl` |
+| Windows (PowerShell) | `.\scripts\setup_ollama_windows.ps1` |
+
+Chaque script installe Ollama si nécessaire, télécharge le modèle et affiche la config `.env` à utiliser.
+
+Puis dans `.env` :
+```env
+LLM_PROVIDER=local_ollama
+LLM_MODEL=qwen2.5:7b
+OLLAMA_BASE_URL=http://host.docker.internal:11434
 ```
 
-Aucune donnée ne quitte la machine.
+```bash
+docker compose up
+```
 
 ---
 
@@ -324,6 +336,35 @@ ss -tlnp sport = :8000
 # Puis tuer le docker-proxy correspondant :
 sudo kill <PID>
 ```
+
+### Ollama inaccessible depuis Docker (`All connection attempts failed`)
+
+Ollama écoute par défaut sur `127.0.0.1` — invisible depuis les conteneurs Docker.
+Le script `setup_ollama_local.sh` corrige ça automatiquement. Si le problème persiste :
+
+```bash
+# Ollama installé en snap (Ubuntu)
+sudo snap set ollama host=0.0.0.0
+sudo snap restart ollama
+
+# Ollama installé classiquement
+export OLLAMA_HOST=0.0.0.0   # ajouter dans ~/.bashrc pour le rendre permanent
+pkill -f "ollama serve" && OLLAMA_HOST=0.0.0.0 ollama serve &
+```
+
+**Alternative — IP locale directe** (utile si `host.docker.internal` ne fonctionne pas) :
+
+```bash
+# Trouver l'IP de la machine sur le réseau local
+ip route get 1 | awk '{print $7; exit}'   # ex : 192.168.1.42
+```
+
+Dans `.env` :
+```env
+OLLAMA_BASE_URL=http://192.168.1.42:11434   # remplacer par votre IP
+```
+
+Cette approche évite `host.docker.internal` et fonctionne sur toutes les configurations Docker.
 
 ---
 

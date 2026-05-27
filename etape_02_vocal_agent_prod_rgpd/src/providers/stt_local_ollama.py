@@ -9,7 +9,7 @@ import tempfile
 import asyncio
 from .base import STTProvider
 
-_MODEL_SIZE = os.getenv("STT_MODEL", "base")
+_MODEL_SIZE = os.getenv("WHISPER_MODEL", "base")
 _MODEL_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 _MODEL_DIR = "/models"
 

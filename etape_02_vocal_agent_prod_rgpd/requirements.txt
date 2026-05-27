@@ -20,6 +20,7 @@ mistralai==1.2.0
 
 # ── STT local (faster-whisper, 100% hors-ligne, s'active si STT_PROVIDER=local_ollama) ──
 faster-whisper==1.0.3
+requests==2.32.3          # requis par faster-whisper (download du modèle)
 
 # ── Monitoring (Prometheus) ───────────────────────────────────────────────────
 prometheus-client==0.21.0
