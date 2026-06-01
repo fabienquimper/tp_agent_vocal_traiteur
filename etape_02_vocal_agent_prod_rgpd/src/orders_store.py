@@ -26,6 +26,14 @@ def _load_from_disk() -> None:
     _loaded = True
 
 
+def delete_by_phone(self, phone: str) -> int:
+    """Supprime toutes les commandes correspondant au numéro de téléphone."""
+    original_len = len(self._orders)
+    self._orders = [o for o in self._orders if o.get("customer_phone") != phone]
+    if len(self._orders) != original_len:
+        self._persist()   # réécriture du JSON + rebuild Excel
+    return original_len - len(self._orders)
+
 def _save_to_disk() -> None:
     path = Path(_ORDERS_DIR) / _ORDERS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)

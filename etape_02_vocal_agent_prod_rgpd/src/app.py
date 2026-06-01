@@ -35,7 +35,7 @@ from typing import Any, Optional
 
 import httpx
 import yaml
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response as HTTPResponse
 from fastapi.staticfiles import StaticFiles
@@ -955,6 +955,17 @@ async def get_status():
 
     return {"status": "ok", "checks": checks}
 
+
+@app.delete("/api/orders/{phone}")
+async def delete_orders_by_phone(
+    phone: str,
+    authorization: str = Header(default="")
+):
+    """RGPD art. 17 — droit à l'effacement."""
+    if _API_TOKEN and authorization != f"Bearer {_API_TOKEN}":
+        raise HTTPException(status_code=401, detail="Token requis")
+    deleted_count = _orders_store.delete_by_phone(phone)
+    return {"deleted": deleted_count, "phone": phone, "status": "ok"}
 
 # ── UI statique ────────────────────────────────────────────────────────────────
 # Monté EN DERNIER : les routes /api/*, /health déclarées au-dessus ont toujours
