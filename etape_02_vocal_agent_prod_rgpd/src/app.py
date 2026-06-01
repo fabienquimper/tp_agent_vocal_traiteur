@@ -1023,9 +1023,11 @@ async def delete_orders_by_phone(
     authorization: str = Header(default="")
 ):
     """RGPD art. 17 — droit à l'effacement."""
-    if _API_TOKEN and authorization != f"Bearer {_API_TOKEN}":
+    api_token = os.getenv("API_TOKEN", "")
+    if api_token and authorization != f"Bearer {api_token}":
         raise HTTPException(status_code=401, detail="Token requis")
-    deleted_count = _orders_store.delete_by_phone(phone)
+    from .orders_store import delete_by_phone
+    deleted_count = delete_by_phone(phone)
     return {"deleted": deleted_count, "phone": phone, "status": "ok"}
 
 # ── UI statique ────────────────────────────────────────────────────────────────

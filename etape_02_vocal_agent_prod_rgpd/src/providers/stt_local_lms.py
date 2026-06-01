@@ -4,7 +4,6 @@ LM Studio expose : POST http://localhost:1234/v1/audio/transcriptions
 """
 
 import io
-import asyncio
 import httpx
 from .base import STTProvider
 

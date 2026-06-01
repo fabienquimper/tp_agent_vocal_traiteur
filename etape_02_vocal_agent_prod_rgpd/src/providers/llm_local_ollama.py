@@ -3,7 +3,6 @@ LLM via Ollama sur l'hôte (pas dans Docker).
 Ollama expose une API compatible OpenAI sur http://host.docker.internal:11434.
 """
 
-import asyncio
 import httpx
 from .base import LLMProvider
 

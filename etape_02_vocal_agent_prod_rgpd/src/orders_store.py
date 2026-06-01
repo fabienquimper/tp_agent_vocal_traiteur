@@ -5,7 +5,6 @@ Séparé de app.py pour être testable unitairement.
 
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,13 +25,16 @@ def _load_from_disk() -> None:
     _loaded = True
 
 
-def delete_by_phone(self, phone: str) -> int:
+def delete_by_phone(phone: str) -> int:
     """Supprime toutes les commandes correspondant au numéro de téléphone."""
-    original_len = len(self._orders)
-    self._orders = [o for o in self._orders if o.get("customer_phone") != phone]
-    if len(self._orders) != original_len:
-        self._persist()   # réécriture du JSON + rebuild Excel
-    return original_len - len(self._orders)
+    global _orders
+    if not _loaded:
+        _load_from_disk()
+    original_len = len(_orders)
+    _orders = [o for o in _orders if o.get("customer_phone") != phone]
+    if len(_orders) != original_len:
+        _save_to_disk()
+    return original_len - len(_orders)
 
 def _save_to_disk() -> None:
     path = Path(_ORDERS_DIR) / _ORDERS_FILE
