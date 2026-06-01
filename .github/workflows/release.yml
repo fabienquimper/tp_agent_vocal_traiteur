@@ -74,10 +74,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Démarrer l'agent en mode test
         run: |
-          cp .env.example .env
-          echo "GROQ_API_KEY=$GROQ_API_KEY" >> .env
-          echo "STT_PROVIDER=groq" >> .env
-          echo "LLM_PROVIDER=groq" >> .env
+          printf 'GROQ_API_KEY=%s\nSTT_PROVIDER=groq\nLLM_PROVIDER=groq\nLLM_MODEL=llama-3.1-8b-instant\nTTS_PROVIDER=service\nORDER_COMPLEXITY_THRESHOLD=6\n' "$GROQ_API_KEY" > .env
           docker compose up -d agent tts
           for i in $(seq 1 20); do
             curl -sf http://localhost:8000/health && break || sleep 5
@@ -121,8 +118,7 @@ jobs:
           python-version: "3.11"
       - name: Démarrer l'agent
         run: |
-          cp .env.example .env
-          echo "GROQ_API_KEY=$GROQ_API_KEY" >> .env
+          printf 'GROQ_API_KEY=%s\nSTT_PROVIDER=groq\nLLM_PROVIDER=groq\nLLM_MODEL=llama-3.1-8b-instant\nTTS_PROVIDER=service\nORDER_COMPLEXITY_THRESHOLD=6\n' "$GROQ_API_KEY" > .env
           docker compose up -d agent tts
           for i in $(seq 1 20); do
             curl -sf http://localhost:8000/health && break || sleep 5
