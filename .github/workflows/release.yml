@@ -83,7 +83,7 @@ jobs:
             curl -sf http://localhost:8000/health && break || sleep 5
           done
       - name: Installer promptfoo
-        run: npm install -g promptfoo@0.103.5
+        run: npm install -g promptfoo@0.121.13
       - name: Lancer le golden set
         run: promptfoo eval --config tests/promptfoo.yaml --output results.json
       - name: Vérifier le seuil de 90 %
