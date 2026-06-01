@@ -20,12 +20,14 @@ Conformité :
 
 import asyncio
 import base64
+import io
 import json
 import os
 import random
 import re
 import time
 import uuid
+import wave
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -133,21 +135,32 @@ def _render(template: str, **kwargs) -> str:
 # ── Providers (instanciés au démarrage) ───────────────────────────────────────
 _stt_provider = None
 _llm_provider = None
+_piper_voice   = None   # PiperVoice (mode TTS_PROVIDER=embedded uniquement)
 
-_TTS_URL = os.getenv("TTS_SERVICE_URL", "http://tts:8002")
+_TTS_URL        = os.getenv("TTS_SERVICE_URL", "http://tts:8002")
+_TTS_PROVIDER   = os.getenv("TTS_PROVIDER", "service")   # "service" | "embedded" | "groq"
+_GROQ_TTS_MODEL = os.getenv("GROQ_TTS_MODEL", "playai-tts")
+_GROQ_TTS_VOICE = os.getenv("GROQ_TTS_VOICE", "Celeste-PlayAI")
+_PIPER_VOICE_PATH = os.getenv("PIPER_VOICE_PATH", "/app/voices/fr_FR-siwis-medium.onnx")
 _ORDER_COMPLEXITY_THRESHOLD = int(os.getenv("ORDER_COMPLEXITY_THRESHOLD", "6"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _stt_provider, _llm_provider
+    global _stt_provider, _llm_provider, _piper_voice
     logger.info("agent_startup", stt_provider=os.getenv("STT_PROVIDER"), llm_provider=os.getenv("LLM_PROVIDER"))
     _stt_provider = create_stt_provider()
     _llm_provider = create_llm_provider()
+    if _TTS_PROVIDER == "embedded":
+        from piper.voice import PiperVoice
+        logger.info("tts_embedded_loading", path=_PIPER_VOICE_PATH)
+        _piper_voice = PiperVoice.load(_PIPER_VOICE_PATH)
+        logger.info("tts_embedded_ready")
     logger.info("providers_ready",
                 stt=_stt_provider.provider_name,
                 llm=_llm_provider.provider_name,
                 llm_model=_llm_provider.model_name,
+                tts=_TTS_PROVIDER,
                 prompt_version=_PROMPT_META.get("version", "unknown"),
                 prompt_model_hint=_PROMPT_META.get("model_hint", ""))
     yield
@@ -259,9 +272,54 @@ class AgentResponse(BaseModel):
 
 # ── Helpers TTS ────────────────────────────────────────────────────────────────
 
+async def _call_tts_groq(text: str) -> Optional[bytes]:
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        logger.warning("tts_groq_no_key")
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                "https://api.groq.com/openai/v1/audio/speech",
+                headers={"Authorization": f"Bearer {groq_key}"},
+                json={
+                    "model": _GROQ_TTS_MODEL,
+                    "voice": _GROQ_TTS_VOICE,
+                    "input": text,
+                    "response_format": "wav",
+                },
+            )
+            if not r.is_success:
+                logger.warning("tts_groq_error", status=r.status_code, body=r.text)
+                return None
+            return r.content
+    except Exception as exc:
+        logger.warning("tts_groq_unavailable", error=str(exc))
+        return None
+
+
+def _call_tts_embedded(text: str) -> Optional[bytes]:
+    if _piper_voice is None:
+        logger.warning("tts_embedded_not_loaded")
+        return None
+    try:
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wav:
+            _piper_voice.synthesize(text, wav)
+        buf.seek(0)
+        return buf.read()
+    except Exception as exc:
+        logger.warning("tts_embedded_error", error=str(exc))
+        return None
+
+
 async def _call_tts(text: str, skip_tts: bool = False) -> Optional[bytes]:
     if skip_tts or not text.strip():
         return None
+    if _TTS_PROVIDER == "embedded":
+        return await asyncio.get_event_loop().run_in_executor(None, _call_tts_embedded, text)
+    if _TTS_PROVIDER == "groq":
+        return await _call_tts_groq(text)
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(f"{_TTS_URL}/synthesize", json={"text": text})
@@ -934,14 +992,17 @@ async def get_status():
             "model": _llm_provider.model_name if _llm_provider else "none",
         },
     }
-    tts_ok = False
-    async with httpx.AsyncClient(timeout=3) as client:
-        try:
-            r = await client.get(f"{_TTS_URL}/health")
-            tts_ok = r.is_success
-            checks["tts"] = {"status": "ok" if tts_ok else "error"}
-        except Exception as exc:
-            checks["tts"] = {"status": "error", "error": str(exc)[:100]}
+    if _TTS_PROVIDER == "embedded":
+        checks["tts"] = {"status": "ok" if _piper_voice else "error", "provider": "embedded", "voice": _PIPER_VOICE_PATH}
+    elif _TTS_PROVIDER == "groq":
+        checks["tts"] = {"status": "ok", "provider": "groq", "model": _GROQ_TTS_MODEL, "voice": _GROQ_TTS_VOICE}
+    else:
+        async with httpx.AsyncClient(timeout=3) as client:
+            try:
+                r = await client.get(f"{_TTS_URL}/health")
+                checks["tts"] = {"status": "ok" if r.is_success else "error", "provider": "service"}
+            except Exception as exc:
+                checks["tts"] = {"status": "error", "provider": "service", "error": str(exc)[:100]}
 
     if _llm_provider and _llm_provider.provider_name == "local_ollama":
         ollama_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")

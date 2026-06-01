@@ -5,11 +5,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget && rm -rf /var/lib/apt/lists/*
 
 # Dépendances Python (couche Docker mise en cache séparément du code)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --timeout 120 --retries 5 -r requirements.txt
+
+# Voix piper française (utilisée si TTS_PROVIDER=embedded)
+RUN mkdir -p /app/voices && \
+    wget -q -O /app/voices/fr_FR-siwis-medium.onnx \
+        "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx" && \
+    wget -q -O /app/voices/fr_FR-siwis-medium.onnx.json \
+        "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json"
 
 # Code source
 COPY src/ ./src/

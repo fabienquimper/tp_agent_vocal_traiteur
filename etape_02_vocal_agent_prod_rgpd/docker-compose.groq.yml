@@ -31,8 +31,9 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - GROQ_STT_MODEL=${GROQ_STT_MODEL:-whisper-large-v3-turbo}
 
-  # ── Text-to-Speech : piper local (rapide, < 1s, aucun quota) ────────────────
-  tts: {}
+  # ── Text-to-Speech : Groq playai-tts (même clé API, pas de conteneur tts) ────
+  # Le service tts n'est plus nécessaire : l'agent appelle Groq TTS directement.
+  # Pour utiliser piper local à la place, retirez TTS_PROVIDER=groq ci-dessous.
 
   # ── Agent LLM : llama-3.1-8b-instant via Groq ────────────────────────────────
   agent:
@@ -40,6 +41,9 @@ services:
       - LLM_PROVIDER=groq
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - GROQ_LLM_MODEL=${GROQ_LLM_MODEL:-llama-3.1-8b-instant}
+      - TTS_PROVIDER=groq
+      - GROQ_TTS_MODEL=${GROQ_TTS_MODEL:-playai-tts}
+      - GROQ_TTS_VOICE=${GROQ_TTS_VOICE:-Celeste-PlayAI}
     depends_on:
       ollama:
         condition: service_healthy
@@ -48,3 +52,4 @@ services:
         condition: service_healthy
       tts:
         condition: service_healthy
+        required: false   # tts non démarré en mode Groq TTS → dépendance ignorée

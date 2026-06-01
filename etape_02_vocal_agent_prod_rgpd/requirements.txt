@@ -18,6 +18,9 @@ structlog==24.4.0
 groq==0.12.0
 mistralai==1.2.0
 
+# ── TTS embarqué (piper-tts, voix française locale, s'active si TTS_PROVIDER=embedded) ──
+piper-tts==1.2.0
+
 # ── STT local (faster-whisper, 100% hors-ligne, s'active si STT_PROVIDER=local_ollama) ──
 faster-whisper==1.0.3
 requests==2.32.3          # requis par faster-whisper (download du modèle)

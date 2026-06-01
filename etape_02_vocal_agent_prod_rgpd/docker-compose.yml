@@ -32,6 +32,7 @@ services:
     depends_on:
       tts:
         condition: service_healthy
+        required: false   # optionnel si TTS_PROVIDER=embedded
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 30s
