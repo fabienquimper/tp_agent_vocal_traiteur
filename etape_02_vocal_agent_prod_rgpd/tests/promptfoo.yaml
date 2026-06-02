@@ -24,16 +24,16 @@ prompts:
   - "{{message}}"
 
 evaluateOptions:
-  maxConcurrency: 3        # 3 tests en parallèle → 3x plus rapide sans dépasser les quotas Groq
-  delay: 500               # 0.5 s entre chaque batch
+  maxConcurrency: 1        # 1 test à la fois : agent (Groq) + juge (Groq) → 2 appels séquentiels max
+  delay: 3000              # 3 s entre chaque test → ~50 appels Groq sur ~4 min ≈ 13 req/min (limite : 30)
 
 # ── Juge llm-rubric ────────────────────────────────────────────────────────────
-# llama-3.1-8b-instant : rapide, faible consommation de quota, suffisant pour évaluer
-# des réponses simples en français. Remplacer par llama-3.3-70b-versatile si la
-# précision du juge s'avère insuffisante.
+# Le juge évalue la réponse de l'agent (PASS/FAIL) sans connaître le system prompt traiteur.
+# Note avancée : pour un quota séparé, remplacer par "mistral:mistral-large-latest"
+# et ajouter MISTRAL_API_KEY dans .env (promptfoo lit MISTRAL_API_KEY, pas MISTRALAI_API_KEY).
 defaultTest:
   options:
-    provider: "groq:llama-3.1-8b-instant"
+    provider: "groq:llama-3.3-70b-versatile"
 
 tests:
   # ── Cas nominaux commande ──────────────────────────────────────────────────
