@@ -74,8 +74,8 @@ jobs:
       - uses: actions/checkout@v5
       - name: Démarrer l'agent en mode test
         run: |
-          printf 'GROQ_API_KEY=%s\nSTT_PROVIDER=groq\nLLM_PROVIDER=groq\nLLM_MODEL=llama-3.1-8b-instant\nTTS_PROVIDER=service\nORDER_COMPLEXITY_THRESHOLD=6\n' "$GROQ_API_KEY" > .env
-          docker compose up -d agent tts
+          printf 'GROQ_API_KEY=%s\nSTT_PROVIDER=groq\nLLM_PROVIDER=groq\nLLM_MODEL=llama-3.1-8b-instant\nTTS_PROVIDER=embedded\nORDER_COMPLEXITY_THRESHOLD=6\n' "$GROQ_API_KEY" > .env
+          docker compose up -d agent
           for i in $(seq 1 20); do
             curl -sf http://localhost:8000/health && break || sleep 5
           done
@@ -118,8 +118,8 @@ jobs:
           python-version: "3.11"
       - name: Démarrer l'agent
         run: |
-          printf 'GROQ_API_KEY=%s\nSTT_PROVIDER=groq\nLLM_PROVIDER=groq\nLLM_MODEL=llama-3.1-8b-instant\nTTS_PROVIDER=service\nORDER_COMPLEXITY_THRESHOLD=6\n' "$GROQ_API_KEY" > .env
-          docker compose up -d agent tts
+          printf 'GROQ_API_KEY=%s\nSTT_PROVIDER=groq\nLLM_PROVIDER=groq\nLLM_MODEL=llama-3.1-8b-instant\nTTS_PROVIDER=embedded\nORDER_COMPLEXITY_THRESHOLD=6\n' "$GROQ_API_KEY" > .env
+          docker compose up -d agent
           for i in $(seq 1 20); do
             curl -sf http://localhost:8000/health && break || sleep 5
           done
