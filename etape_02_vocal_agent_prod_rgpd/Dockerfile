@@ -12,11 +12,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --timeout 120 --retries 5 -r requirements.txt
 
 # Voix piper française (utilisée si TTS_PROVIDER=embedded)
-RUN mkdir -p /app/voices && \
-    wget -q -O /app/voices/fr_FR-siwis-medium.onnx \
-        "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx" && \
-    wget -q -O /app/voices/fr_FR-siwis-medium.onnx.json \
-        "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json"
+# huggingface_hub est déjà installé (dépendance de faster-whisper) et gère
+# correctement les téléchargements HuggingFace depuis les environnements CI.
+RUN python3 -c "\
+from huggingface_hub import hf_hub_download; \
+import shutil, pathlib; \
+pathlib.Path('/app/voices').mkdir(exist_ok=True); \
+shutil.copy(hf_hub_download('rhasspy/piper-voices', 'fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx'), '/app/voices/fr_FR-siwis-medium.onnx'); \
+shutil.copy(hf_hub_download('rhasspy/piper-voices', 'fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json'), '/app/voices/fr_FR-siwis-medium.onnx.json') \
+"
 
 # Code source
 COPY src/ ./src/
