@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y curl wget && rm -rf /var/lib/apt/lists/
 
 # Dépendances Python (couche Docker mise en cache séparément du code)
 COPY requirements.txt .
-RUN pip install --no-cache-dir --timeout 120 --retries 5 -r requirements.txt
+RUN pip install --no-cache-dir --timeout 120 --retries 5 -r requirements.txt && \
+    pip install --no-cache-dir piper-tts==1.2.0
 
 # Voix piper française (utilisée si TTS_PROVIDER=embedded)
 # huggingface_hub est déjà installé (dépendance de faster-whisper) et gère
