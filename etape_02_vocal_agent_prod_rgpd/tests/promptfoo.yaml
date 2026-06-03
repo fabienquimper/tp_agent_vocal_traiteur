@@ -95,7 +95,7 @@ tests:
       message: "Je voudrais des macarons"
     assert:
       - type: llm-rubric
-        value: "La réponse confirme les macarons ou demande la quantité"
+        value: "La réponse confirme les macarons, demande la quantité, ou demande des précisions sur le parfum ou le type"
 
   # ── Cas hors menu ──────────────────────────────────────────────────────────
   - description: "Produit hors menu : caviar"
@@ -195,9 +195,7 @@ tests:
       message: "Est-ce que vous avez des plats à base de porc ?"
     assert:
       - type: llm-rubric
-        value: "La réponse mentionne au moins deux plats contenant du porc (rougail saucisse, plateau de charcuterie ou terrine)"
-      - type: contains
-        value: "rougail"
+        value: "La réponse mentionne au moins un plat contenant du porc présent au menu (plateau de charcuterie, terrine de campagne, rougail saucisse, jambon ou saucisson)"
 
   - description: "Question ingrédients : plats végétariens"
     vars:

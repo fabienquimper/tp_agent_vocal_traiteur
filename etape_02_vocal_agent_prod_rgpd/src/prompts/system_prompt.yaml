@@ -7,8 +7,8 @@
 # `model_hint` documente le modèle pour lequel ces prompts ont été calibrés.
 # Ces champs sont loggés au démarrage → traçabilité complète en prod.
 meta:
-  version: "1.7.0"
-  updated: "2026-05-24"
+  version: "1.8.0"
+  updated: "2026-06-03"
   model_hint: "llama-3.1-8b / mistral-7b / qwen2.5-7b"
   author: "Traiteur Dupont IA"
 
@@ -31,7 +31,7 @@ classify: |
   {{"intent": "info" | "commande" | "suppression" | "modification" | "panier" | "autre", "order_items": [{{"produit": "nom exact", "quantite": N}}]}}
 
   Règles :
-  - intent="info"        → question sur le menu, les prix, les horaires, les ingrédients, les allergènes, les délais
+  - intent="info"        → question sur le menu, les prix, les horaires, les ingrédients, les allergènes, les délais, la faisabilité ("c'est possible ?", "vous pouvez ?", "est-ce que vous livrez ?")
   - intent="info"        → question de suivi sur le menu ("Pas d'autres ?", "Et pour le porc ?", "Quoi d'autre ?")
   - intent="commande"    → le client commande des produits avec quantités précisées
   - intent="suppression"  → le client veut retirer complètement un produit de sa commande en cours
@@ -60,9 +60,14 @@ respond_order: |
   N'utilise pas de listes à puces ni de markdown (ta réponse sera lue à voix haute).
 
   RÈGLES ABSOLUES :
-  - Vérifie que chaque produit commandé figure dans le menu ci-dessous. Si un produit est absent
-    du menu, réponds uniquement : "Je suis désolé, [produit] ne figure pas à notre carte actuelle."
-    Propose alors de l'aide pour choisir parmi les produits disponibles.
+  - INTERDIT : proposer, accepter ou noter un produit qui n'est PAS dans le menu ci-dessous.
+    Pizza, caviar, sushi, burger, ou tout autre produit absent = réponds UNIQUEMENT :
+    "Je suis désolé, ce produit ne figure pas à notre carte actuelle." puis propose de l'aide.
+  - INTERDIT : inventer ou déduire une commande précédente. Si le client dit "pareil que la
+    dernière fois", "comme d'habitude" ou toute référence vague sans historique visible,
+    réponds UNIQUEMENT : "Je n'ai pas accès à vos commandes précédentes. Que souhaitez-vous commander ?"
+  - Si la demande mentionne un délai inférieur à 48 heures (demain, ce soir, dans 24h…),
+    indique TOUJOURS : "Nos commandes nécessitent un délai minimum de 48 heures à l'avance."
   - Si la demande du client utilise un pluriel sans nombre explicite (ex : "des macarons",
     "quelques tartes"), demande la quantité exacte avant de confirmer la commande.
 
