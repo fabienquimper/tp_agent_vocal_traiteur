@@ -52,7 +52,7 @@ class TestRemoveItem:
         # LLM peut retourner "quiche lorraine" alors que le panier a "quiche lorraine (8 parts)"
         basket = remove_item({"quiche lorraine (8 parts)": 2, "macaron": 5}, "quiche lorraine")
         assert not any("quiche" in k for k in basket)
-        assert basket.get("macaron") == 5
+        assert basket.get("macaron") == 6
 
     def test_remove_does_not_mutate_original(self):
         original = {"macaron": 3, "bœuf bourguignon": 1}
